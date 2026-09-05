@@ -160,11 +160,11 @@ export class World {
         continue;
       }
       // Coalesce obsolete samples instead of building up latency when client
-      // and server clocks drift. Only the newest direction buys one step.
+      // and server clocks drift. Only the newest heading buys one step.
       const input = c.inputs.at(-1);
       c.inputs.length = 0;
       const previous = c.player;
-      const motion = move(this.map, previous, input?.direction ?? null);
+      const motion = move(this.map, previous, input?.heading ?? null);
       const zoneId = zoneAt(this.map, motion.x, motion.y);
       if (input) c.ack = input.seq;
       if (

@@ -163,9 +163,9 @@ Stop the Compose app first (`docker compose stop app`); only one server can own 
 - `apps/client/src/game/`: Phaser renderer, animation, keyboard input and interpolation.
 - `apps/client/src/ui/`: React controls and styles.
 
-Inputs contain only sequence and cardinal direction. Each server tick applies the newest input sample for at most one movement step per person; older queued samples are acknowledged and discarded to avoid clock-drift backlog. Queue/sequence bounds prevent speed hacks. The client predicts the same fixed steps and replays only unacknowledged inputs after correction. Remote positions use roughly 100ms interpolation. Changed player records are broadcast within the workspace; tiny tick/ack envelopes still go to each client. Region interest filtering belongs at the marked broadcast point when measurements justify it.
+Inputs contain only sequence and heading, one of the eight compass directions. Each server tick applies the newest input sample for at most one movement step per person; diagonals cover the same distance as cardinals and slide along a wall when only one axis is blocked; older queued samples are acknowledged and discarded to avoid clock-drift backlog. Queue/sequence bounds prevent speed hacks. The client predicts the same fixed steps and replays only unacknowledged inputs after correction. Remote positions use roughly 100ms interpolation. Changed player records are broadcast within the workspace; tiny tick/ack envelopes still go to each client. Region interest filtering belongs at the marked broadcast point when measurements justify it.
 
-React and Phaser never read each other's state: `RendererBridge` carries copied snapshots out and directional commands in. Phaser owns its display objects; the session controller owns networking and prediction.
+React and Phaser never read each other's state: `RendererBridge` carries copied snapshots out and heading commands in. Phaser owns its display objects; the session controller owns networking and prediction.
 
 ## Test
 

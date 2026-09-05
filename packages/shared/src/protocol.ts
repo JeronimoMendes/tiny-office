@@ -1,14 +1,16 @@
 import { z } from 'zod';
 import type { TiledMap } from './map';
-import type { Motion } from './movement';
-export const PROTOCOL_VERSION = 1;
+import { headings, type Motion } from './movement';
+export const PROTOCOL_VERSION = 2;
 export const statusSchema = z.enum(['free', 'focus', 'do-not-disturb']);
-export const directionSchema = z.enum(['up', 'down', 'left', 'right']);
+export const headingSchema = z.enum(
+  Object.keys(headings) as [keyof typeof headings, ...(keyof typeof headings)[]],
+);
 export const clientMessageSchema = z
   .object({
     type: z.literal('input'),
     seq: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    direction: directionSchema.nullable(),
+    heading: headingSchema.nullable(),
   })
   .strict();
 export type Input = z.infer<typeof clientMessageSchema>;

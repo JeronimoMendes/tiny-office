@@ -51,7 +51,7 @@ Per-tick positions live in memory. Dirty records flush in batches about every tw
 
 Versioned, runtime-validated JSON over same-origin authenticated WebSockets.
 
-- Client: `input { seq, direction }` with cardinal direction or idle. No coordinates or client-supplied simulation duration.
+- Client: `input { seq, heading }` with one of the eight compass headings or idle. No coordinates or client-supplied simulation duration.
 - Server: `welcome { selfId, mapRevision, tick, players, ... }`; `delta { tick, ack, changedPlayers, removedPlayerIds }`; structured errors.
 - Inputs are bounded and sequenced. At the fixed 15 Hz server rate, the newest sample determines one movement step; obsolete queued samples are coalesced/acknowledged rather than accumulating clock-drift latency. Shared fixed-step collision rules support client prediction and replay after acknowledgements.
 - Remote players render from a short interpolation buffer.

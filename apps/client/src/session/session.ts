@@ -3,7 +3,7 @@ import {
   parseMap,
   PROTOCOL_VERSION,
   STEP_MS,
-  type Direction,
+  type Heading,
   type Input,
   type Player,
   type ServerMessage,
@@ -29,7 +29,7 @@ export class OfficeSession {
   private retry = 0;
   private seq = 0;
   private pending: Input[] = [];
-  private direction: Direction | null = null;
+  private heading: Heading | null = null;
   private predicted: Player | null = null;
   private tick = 0;
   private receivedAt = 0;
@@ -42,8 +42,8 @@ export class OfficeSession {
         this.renderListeners.delete(listener);
       };
     },
-    setDirection: (direction) => {
-      this.direction = direction;
+    setHeading: (heading) => {
+      this.heading = heading;
     },
   };
   constructor(info: SessionInfo) {
@@ -74,7 +74,7 @@ export class OfficeSession {
     document.addEventListener('visibilitychange', this.clearInput);
   }
   private clearInput = () => {
-    this.direction = null;
+    this.heading = null;
   };
   stop() {
     this.stopped = true;
@@ -102,7 +102,7 @@ export class OfficeSession {
       if (this.stopped || socket !== this.socket) return;
       this.pending = [];
       this.predicted = null;
-      this.direction = null;
+      this.heading = null;
       if ([4001, 4002, 4003].includes(event.code)) {
         this.update({
           connection: 'closed',
@@ -165,7 +165,7 @@ export class OfficeSession {
     if (self) {
       this.predicted = { ...self };
       for (const input of this.pending)
-        this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.direction) };
+        this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.heading) };
     }
     this.update({ players: [...players.values()] });
     this.publishRender();
@@ -181,11 +181,11 @@ export class OfficeSession {
     const input: Input = {
       type: 'input',
       seq: ++this.seq,
-      direction: document.hidden ? null : this.direction,
+      heading: document.hidden ? null : this.heading,
     };
     this.pending.push(input);
     this.socket.send(JSON.stringify(input));
-    this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.direction) };
+    this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.heading) };
     this.publishRender();
   }
   private publishRender() {

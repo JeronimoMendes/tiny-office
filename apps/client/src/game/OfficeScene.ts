@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { parseMap, STEP_MS, type Direction, type Player } from '@office/shared';
+import { heading, parseMap, STEP_MS, type Direction, type Player } from '@office/shared';
 import type { RendererBridge, RenderSnapshot } from '../session/bridge';
 
 type Sample = { time: number; player: Player };
@@ -128,17 +128,25 @@ export class OfficeScene extends Phaser.Scene {
     const direction = this.keyDirection(event.key);
     if (!direction) return;
     event.preventDefault();
-    this.keys.set(event.key.toLowerCase(), direction);
-    this.bridge.setDirection(direction);
+    if (!this.keys.has(event.key.toLowerCase())) {
+      this.keys.set(event.key.toLowerCase(), direction);
+      this.sendHeading();
+    }
   };
   private keyUp = (event: KeyboardEvent) => {
-    this.keys.delete(event.key.toLowerCase());
-    this.bridge.setDirection([...this.keys.values()].at(-1) ?? null);
+    if (this.keys.delete(event.key.toLowerCase())) this.sendHeading();
   };
   private clearKeys = () => {
     this.keys.clear();
-    this.bridge.setDirection(null);
+    this.bridge.setHeading(null);
   };
+  // The newest key held on each axis wins, so the two axes combine into a
+  // diagonal and reversing one axis does not cancel the other.
+  private sendHeading() {
+    const held = [...this.keys.values()];
+    const newest = (axis: Direction[]) => held.filter((d) => axis.includes(d)).at(-1) ?? null;
+    this.bridge.setHeading(heading(newest(['left', 'right']), newest(['up', 'down'])));
+  }
   private receive(snapshot: RenderSnapshot) {
     if (snapshot.workspace.mapRevision !== this.lastRevision) {
       location.reload();

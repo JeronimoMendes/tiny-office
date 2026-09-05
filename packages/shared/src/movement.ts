@@ -3,7 +3,23 @@ export const TICK_HZ = 15;
 export const STEP_MS = 1000 / TICK_HZ;
 export const SPEED = 120;
 export type Direction = 'up' | 'down' | 'left' | 'right';
+export const headings = {
+  up: [0, -1],
+  down: [0, 1],
+  left: [-1, 0],
+  right: [1, 0],
+  'up-left': [-1, -1],
+  'up-right': [1, -1],
+  'down-left': [-1, 1],
+  'down-right': [1, 1],
+} as const;
+export type Heading = keyof typeof headings;
 export type Motion = { x: number; y: number; direction: Direction; moving: boolean };
+
+export function heading(horizontal: Direction | null, vertical: Direction | null): Heading | null {
+  if (horizontal && vertical) return `${vertical}-${horizontal}` as Heading;
+  return horizontal ?? vertical;
+}
 
 export function canStand(map: OfficeMap, x: number, y: number): boolean {
   if (
@@ -23,20 +39,32 @@ export function canStand(map: OfficeMap, x: number, y: number): boolean {
   return true;
 }
 
-export function move(map: OfficeMap, state: Motion, direction: Direction | null): Motion {
-  if (!direction) return { ...state, moving: false };
-  const dx = direction === 'left' ? -1 : direction === 'right' ? 1 : 0;
-  const dy = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
+// The facing sticks to whichever axis the avatar was already showing while that
+// axis stays part of the heading, so tapping a second key never flips the sprite.
+function facing(previous: Direction, dx: number, dy: number): Direction {
+  const dominant = { left: dx < 0, right: dx > 0, up: dy < 0, down: dy > 0 };
+  if (dominant[previous]) return previous;
+  return dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down';
+}
+
+export function move(map: OfficeMap, state: Motion, to: Heading | null): Motion {
+  if (!to) return { ...state, moving: false };
+  const [ux, uy] = headings[to];
+  const direction = facing(state.direction, ux, uy);
   let { x, y } = state;
   // Small fixed substeps prevent tunneling and allow approaching a wall closely.
   const steps = Math.ceil(SPEED / TICK_HZ / 2),
-    distance = SPEED / TICK_HZ / steps;
+    length = SPEED / TICK_HZ / steps / (ux && uy ? Math.SQRT2 : 1),
+    dx = ux * length,
+    dy = uy * length;
   for (let i = 0; i < steps; i++) {
-    const nx = x + dx * distance,
-      ny = y + dy * distance;
-    if (!canStand(map, nx, ny)) break;
-    x = nx;
-    y = ny;
+    // Sliding: a blocked diagonal still advances along whichever axis is free.
+    if (canStand(map, x + dx, y + dy)) {
+      x += dx;
+      y += dy;
+    } else if (dx && canStand(map, x + dx, y)) x += dx;
+    else if (dy && canStand(map, x, y + dy)) y += dy;
+    else break;
   }
   return { x, y, direction, moving: x !== state.x || y !== state.y };
 }

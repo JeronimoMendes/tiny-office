@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   canStand,
+  heading,
+  headings,
   move,
   parseMap,
   zoneAt,
@@ -110,15 +112,39 @@ describe('map and zones', () => {
 });
 
 describe('movement authority', () => {
-  it('moves one fixed cardinal step and never accepts client coordinates or durations', () => {
+  it('moves one fixed step and never accepts client coordinates or durations', () => {
     const initial = { ...map.spawn, direction: 'down' as const, moving: false };
     const next = move(map, initial, 'right');
     expect(next.x - initial.x).toBe(SPEED / TICK_HZ);
     expect(next.y).toBe(initial.y);
-    for (const extra of [{ x: 900 }, { dt: 10 }, { direction: 'diagonal' }, { seq: -1 }])
+    for (const extra of [{ x: 900 }, { dt: 10 }, { heading: 'sideways' }, { seq: -1 }])
       expect(
-        clientMessageSchema.safeParse({ type: 'input', seq: 1, direction: 'up', ...extra }).success,
+        clientMessageSchema.safeParse({ type: 'input', seq: 1, heading: 'up', ...extra }).success,
       ).toBe(false);
+  });
+  it('walks diagonals at the same speed as cardinals and keeps the sprite facing', () => {
+    const initial = { ...map.spawn, direction: 'down' as const, moving: false };
+    const next = move(map, initial, 'up-right');
+    expect(Math.hypot(next.x - initial.x, next.y - initial.y)).toBeCloseTo(SPEED / TICK_HZ, 9);
+    expect(next.x - initial.x).toBeCloseTo(initial.y - next.y, 9);
+    expect(next.direction).toBe('right');
+    expect(move(map, { ...initial, direction: 'up' }, 'up-right').direction).toBe('up');
+    expect(move(map, { ...initial, direction: 'left' }, 'up-right').direction).toBe('right');
+  });
+  it('composes headings from the newest key held on each axis', () => {
+    expect(heading('left', 'down')).toBe('down-left');
+    expect(heading(null, 'up')).toBe('up');
+    expect(heading('right', null)).toBe('right');
+    expect(heading(null, null)).toBeNull();
+    expect(Object.keys(headings)).toContain('down-left');
+  });
+  it('slides along a wall instead of stopping when a diagonal is blocked', () => {
+    let state = { x: 48, y: 560, direction: 'left' as const, moving: false };
+    for (let i = 0; i < 20; i++) state = move(map, state, 'down-left') as typeof state;
+    expect(state.x).toBeLessThan(41);
+    expect(state.y - 560).toBeCloseTo((20 * SPEED) / TICK_HZ / Math.SQRT2, 9);
+    expect(state.moving).toBe(true);
+    expect(canStand(map, state.x, state.y)).toBe(true);
   });
   it('collides with walls without tunneling and rejects out-of-bounds positions', () => {
     let state = { x: 48, y: 560, direction: 'left' as const, moving: false };
@@ -133,7 +159,7 @@ describe('movement authority', () => {
   it('coalesces bursts into one step without latency backlog; idle stops movement', () => {
     const { world, peer, messages } = fixture();
     for (let seq = 1; seq <= 5; seq++)
-      world.input(member.id, peer, { type: 'input', seq, direction: 'right' });
+      world.input(member.id, peer, { type: 'input', seq, heading: 'right' });
     world.tick();
     expect(world.connections.get(member.id)!.player.x).toBe(member.x + 8);
     expect(messages.at(-1)).toMatchObject({ type: 'delta', ack: 5 });
@@ -147,7 +173,7 @@ describe('movement authority', () => {
     for (const sequence of [[2], [1, 1], Array.from({ length: 9 }, (_, i) => i + 1)]) {
       const { world, peer } = fixture();
       for (const seq of sequence)
-        world.input(member.id, peer, { type: 'input', seq, direction: 'right' });
+        world.input(member.id, peer, { type: 'input', seq, heading: 'right' });
       expect(peer.close).toHaveBeenCalledWith(4002, expect.any(String));
       expect(world.connections.size).toBe(0);
     }
@@ -157,7 +183,7 @@ describe('movement authority', () => {
     const c = world.connections.get(member.id)!;
     c.player.x = 98;
     c.player.y = 412;
-    world.input(member.id, peer, { type: 'input', seq: 1, direction: 'down' });
+    world.input(member.id, peer, { type: 'input', seq: 1, heading: 'down' });
     world.tick();
     expect(c.player.zoneId).toBe('desk-1');
   });

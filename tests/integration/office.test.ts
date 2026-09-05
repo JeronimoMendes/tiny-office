@@ -222,7 +222,7 @@ it('moves via real WebSockets, flushes on disconnect and restores after an empty
   if (welcome.type !== 'welcome') throw new Error('Expected welcome');
   const start = welcome.players.find((p) => p.id === ownerId)!;
   for (let seq = 1; seq <= 4; seq++) {
-    one.socket.send(JSON.stringify({ type: 'input', seq, direction: 'right' }));
+    one.socket.send(JSON.stringify({ type: 'input', seq, heading: 'right' }));
     await one.next((m) => m.type === 'delta' && m.ack === seq);
   }
   const moved = await one.next((m) => m.type === 'delta' && m.ack === 4);
@@ -310,7 +310,7 @@ it('serves authoritative changes to 30 concurrent authenticated players', async 
     expect(office.world.connections.size).toBe(30);
     for (let seq = 1; seq <= 4; seq++) {
       for (const client of clients)
-        client.socket.send(JSON.stringify({ type: 'input', seq, direction: 'right' }));
+        client.socket.send(JSON.stringify({ type: 'input', seq, heading: 'right' }));
       await Promise.all(clients.map((c) => c.next((m) => m.type === 'delta' && m.ack === seq)));
     }
     const deltas = await Promise.all(
@@ -539,7 +539,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
 
     // Walking onto the open floor ends the conversation.
     for (let seq = 1; seq <= 3; seq++)
-      sockets[0].send(JSON.stringify({ type: 'input', seq, direction: 'up' }));
+      sockets[0].send(JSON.stringify({ type: 'input', seq, heading: 'up' }));
     await until(
       () => media.world.connections.get(alice.id)?.player.zoneId === null,
       'Alice never left the desk zone',

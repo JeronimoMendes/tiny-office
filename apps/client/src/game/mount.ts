@@ -26,7 +26,7 @@ export function mountOffice(parent: HTMLElement, bridge: RendererBridge): () => 
   return () => {
     unsubscribe();
     resize.disconnect();
-    bridge.setDirection(null);
+    bridge.setHeading(null);
     game?.destroy(true);
   };
 }

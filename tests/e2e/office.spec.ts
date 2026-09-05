@@ -160,11 +160,17 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   // publishing inside it; cross-zone isolation is covered by the server tests.
   expect((await (await coworker.request.get('/api/media/token')).json()).enabled).toBe(false);
 
+  // Holding one key per axis walks a diagonal; the facing stays on the axis it
+  // was already showing.
   const bobStart = coworkerPlayers.get(bob.id)!;
   await coworker.keyboard.down('w');
+  await coworker.keyboard.down('a');
   await expect.poll(() => ownerPlayers.get(bob.id)?.y).toBeLessThan(bobStart.y - 48);
+  await expect.poll(() => ownerPlayers.get(bob.id)?.x).toBeLessThan(bobStart.x - 48);
   await coworker.keyboard.up('w');
+  await coworker.keyboard.up('a');
   await expect.poll(() => coworkerPlayers.get(bob.id)?.moving).toBe(false);
+  expect(coworkerPlayers.get(bob.id)?.direction).toBe('left');
   await page.reload();
   await expect(page.getByTestId('connection')).toHaveText('2 here');
   await expect.poll(() => ownerPlayers.get(owner.id)?.x).toBe(saved.x);
