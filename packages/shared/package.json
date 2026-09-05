@@ -1,0 +1,9 @@
+{
+  "name": "@office/shared",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}

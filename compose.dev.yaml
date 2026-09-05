@@ -1,0 +1,5 @@
+# Optional host-side development/test access. Not used in the default deployment.
+services:
+  db:
+    ports:
+      - '127.0.0.1:5432:5432'

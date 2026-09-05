@@ -1,0 +1,383 @@
+import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
+import { WebSocket } from 'ws';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { Store, DEFAULT_WORKSPACE_ID } from '../../apps/server/src/persistence/store';
+import { createApp } from '../../apps/server/src/app';
+import { World } from '../../apps/server/src/world/tick';
+import type { ServerMessage } from '@office/shared';
+
+const url = process.env.TEST_DATABASE_URL;
+if (!url)
+  throw new Error(
+    'Set TEST_DATABASE_URL to a PostgreSQL database; tests use an isolated temporary schema.',
+  );
+const admin = new Pool({ connectionString: url });
+const schema = `test_${randomUUID().replaceAll('-', '')}`;
+const pool = new Pool({ connectionString: url, options: `-c search_path=${schema}` });
+const store = new Store(pool),
+  id = DEFAULT_WORKSPACE_ID;
+const raw = JSON.parse(readFileSync('maps/office.tmj', 'utf8'));
+const origin = 'http://office.test';
+let office: Awaited<ReturnType<typeof createApp>>;
+let ownerCookie: string, ownerId: string;
+const cookieOf = (response: { headers: Record<string, unknown> }) =>
+  String(response.headers['set-cookie']).split(';')[0];
+const headers = (cookie = ownerCookie) => ({ origin, cookie });
+
+beforeAll(async () => {
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  await store.migrate();
+  await store.ensureWorkspace(id, raw);
+  office = await createApp(store, {
+    workspaceId: id,
+    origin,
+    bootstrapSecret: 'bootstrap-test',
+    logger: false,
+  });
+  await office.app.listen({ port: 0, host: '127.0.0.1' });
+});
+afterAll(async () => {
+  await office?.app.close();
+  await pool.end();
+  await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+  await admin.end();
+});
+
+it('requires the bootstrap secret and protects origin, then claims the owner once', async () => {
+  const payload = { email: 'owner@example.test', displayName: 'Owner', secret: 'bootstrap-test' };
+  expect(
+    (await office.app.inject({ method: 'POST', url: '/api/bootstrap', payload })).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await office.app.inject({
+        method: 'POST',
+        url: '/api/bootstrap',
+        headers: { origin },
+        payload: { ...payload, secret: 'wrong' },
+      })
+    ).statusCode,
+  ).toBe(403);
+  const response = await office.app.inject({
+    method: 'POST',
+    url: '/api/bootstrap',
+    headers: { origin },
+    payload,
+  });
+  expect(response.statusCode).toBe(200);
+  ownerCookie = cookieOf(response);
+  expect(response.headers['set-cookie']).toContain('HttpOnly');
+  expect(response.headers['set-cookie']).toContain('SameSite=Strict');
+  expect(
+    (
+      await office.app.inject({
+        method: 'POST',
+        url: '/api/bootstrap',
+        headers: { origin },
+        payload,
+      })
+    ).statusCode,
+  ).toBe(409);
+  const session = await office.app.inject({ url: '/api/session', headers: headers() });
+  expect(session.statusCode).toBe(200);
+  ownerId = session.json().user.id;
+  expect(session.json().user.role).toBe('owner');
+});
+
+it('atomically redeems personal links once and enforces owner/member permissions', async () => {
+  const response = await office.app.inject({
+    method: 'POST',
+    url: '/api/invites',
+    headers: headers(),
+    payload: { email: 'member@example.test', displayName: 'Member' },
+  });
+  const token = new URLSearchParams(new URL(response.json().url).hash.slice(1)).get('login')!;
+  const results = await Promise.all([store.redeem(token), store.redeem(token)]);
+  expect(results.filter(Boolean)).toHaveLength(1);
+  const cookie = `office_session=${results.find(Boolean)}`;
+  expect(
+    (
+      await office.app.inject({
+        method: 'POST',
+        url: '/api/invites',
+        headers: headers(cookie),
+        payload: { email: 'bad@example.test', displayName: 'Bad' },
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PUT',
+        url: '/api/desks/desk-1',
+        headers: headers(cookie),
+        payload: { userId: ownerId },
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect((await office.app.inject({ method: 'GET', url: '/api/session' })).statusCode).toBe(401);
+  const revoked = await store.invite(id, 'member@example.test', 'Member', raw);
+  await store.invite(id, 'member@example.test', 'Member', raw);
+  expect(await store.redeem(revoked)).toBeNull();
+  const expired = await store.invite(id, 'expired@example.test', 'Expired', raw);
+  await pool.query("UPDATE login_tokens SET expires_at=now()-interval '1 second'");
+  expect(await store.redeem(expired)).toBeNull();
+});
+
+it('persists profile and desk assignments and denies unknown members/zones', async () => {
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/profile',
+        headers: headers(),
+        payload: { displayName: 'Alice', character: 3 },
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PUT',
+        url: '/api/desks/desk-1',
+        headers: headers(),
+        payload: { userId: ownerId },
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PUT',
+        url: '/api/desks/cedar',
+        headers: headers(),
+        payload: { userId: ownerId },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PUT',
+        url: '/api/desks/desk-2',
+        headers: headers(),
+        payload: { userId: randomUUID() },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect((await store.workspace(id)).desks).toEqual({ 'desk-1': ownerId });
+  expect((await store.members(id)).find((m) => m.id === ownerId)).toMatchObject({
+    displayName: 'Alice',
+    character: 3,
+  });
+});
+
+function connect(cookie: string) {
+  const address = office.app.server.address() as { port: number };
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/ws`, {
+    origin,
+    headers: { cookie },
+  });
+  const messages: ServerMessage[] = [];
+  socket.on('message', (data) => messages.push(JSON.parse(data.toString())));
+  return {
+    socket,
+    messages,
+    next: (predicate: (m: ServerMessage) => boolean) =>
+      new Promise<ServerMessage>((resolve, reject) => {
+        const existing = messages.find(predicate);
+        if (existing) {
+          resolve(existing);
+          return;
+        }
+        const timeout = setTimeout(() => {
+          socket.off('message', listener);
+          reject(new Error('Timed out waiting for socket message'));
+        }, 5000);
+        const listener = (data: Buffer) => {
+          const message = JSON.parse(data.toString());
+          if (predicate(message)) {
+            clearTimeout(timeout);
+            socket.off('message', listener);
+            resolve(message);
+          }
+        };
+        socket.on('message', listener);
+      }),
+  };
+}
+
+it('moves via real WebSockets, flushes on disconnect and restores after an empty server restart', async () => {
+  const one = connect(ownerCookie);
+  const welcome = await one.next((m) => m.type === 'welcome');
+  if (welcome.type !== 'welcome') throw new Error('Expected welcome');
+  const start = welcome.players.find((p) => p.id === ownerId)!;
+  for (let seq = 1; seq <= 4; seq++) {
+    one.socket.send(JSON.stringify({ type: 'input', seq, direction: 'right' }));
+    await one.next((m) => m.type === 'delta' && m.ack === seq);
+  }
+  const moved = await one.next((m) => m.type === 'delta' && m.ack === 4);
+  expect(moved.type === 'delta' && moved.changedPlayers.find((p) => p.id === ownerId)?.x).toBe(
+    start.x + 32,
+  );
+  const closed = new Promise((resolve) => one.socket.once('close', resolve));
+  one.socket.close();
+  await closed;
+  await office.app.close();
+  expect((await store.members(id)).find((m) => m.id === ownerId)!.x).toBe(start.x + 32);
+  // Status isn't editable until phase 3; ensure existing status is never reset by a position save.
+  await pool.query(
+    "UPDATE memberships SET status='do-not-disturb' WHERE workspace_id=$1 AND user_id=$2",
+    [id, ownerId],
+  );
+  office = await createApp(store, {
+    workspaceId: id,
+    origin,
+    bootstrapSecret: 'different-secret',
+    logger: false,
+  });
+  await office.app.listen({ port: 0, host: '127.0.0.1' });
+  expect(office.world.connections.size).toBe(0);
+  expect(office.world.members.size).toBeGreaterThan(1);
+  const two = connect(ownerCookie),
+    restored = await two.next((m) => m.type === 'welcome');
+  expect(
+    restored.type === 'welcome' && restored.players.find((p) => p.id === ownerId),
+  ).toMatchObject({
+    x: start.x + 32,
+    y: start.y,
+    displayName: 'Alice',
+    character: 3,
+    status: 'do-not-disturb',
+  });
+  const replaced = new Promise<number>((resolve) =>
+    two.socket.once('close', (code) => resolve(code)),
+  );
+  const three = connect(ownerCookie);
+  await three.next((m) => m.type === 'welcome');
+  expect(await replaced).toBe(4001);
+  expect(office.world.connections.size).toBe(1);
+  three.socket.close();
+});
+
+it('restores the durable map rather than overwriting it from disk and imports explicit revisions', async () => {
+  const original = await store.workspace(id),
+    edited = structuredClone(raw);
+  edited.layers.find((l: any) => l.name === 'zones').objects[0].name = 'Renamed room';
+  await store.ensureWorkspace(id, edited);
+  expect((await store.workspace(id)).mapRevision).toBe(original.mapRevision);
+  await store.importMap(id, edited);
+  const restored = await store.workspace(id);
+  expect(restored.mapRevision).not.toBe(original.mapRevision);
+  expect(restored.desks).toEqual({ 'desk-1': ownerId });
+  const invalid = structuredClone(edited);
+  invalid.layers.find((l: any) => l.name === 'collision').data = [];
+  await expect(store.importMap(id, invalid)).rejects.toThrow();
+  expect((await store.workspace(id)).mapRevision).toBe(restored.mapRevision);
+  const removed = structuredClone(edited);
+  const zones = removed.layers.find((l: any) => l.name === 'zones');
+  zones.objects = zones.objects.filter(
+    (o: any) => !o.properties.some((p: any) => p.name === 'zoneId' && p.value === 'desk-1'),
+  );
+  await store.importMap(id, removed);
+  expect((await store.workspace(id)).desks).toEqual({});
+  const members = await store.members(id);
+  members[0].x = -10;
+  const world = new World(restored, members, store);
+  await world.flush();
+  expect(world.members.get(members[0].id)!.x).toBe(world.map.spawn.x);
+});
+
+it('serves authoritative changes to 30 concurrent authenticated players', async () => {
+  const tokens: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    const link = await store.invite(id, `load-${i}@example.test`, `Player ${i}`, raw);
+    tokens.push((await store.redeem(link))!);
+  }
+  office.world.updateMembers(await store.members(id), await store.desks(id));
+  const clients = tokens.map((token) => connect(`office_session=${token}`));
+  try {
+    const welcomes = await Promise.all(clients.map((c) => c.next((m) => m.type === 'welcome')));
+    expect(office.world.connections.size).toBe(30);
+    for (let seq = 1; seq <= 4; seq++) {
+      for (const client of clients)
+        client.socket.send(JSON.stringify({ type: 'input', seq, direction: 'right' }));
+      await Promise.all(clients.map((c) => c.next((m) => m.type === 'delta' && m.ack === seq)));
+    }
+    const deltas = await Promise.all(
+      clients.map((c) => c.next((m) => m.type === 'delta' && m.ack === 4)),
+    );
+    for (let i = 0; i < clients.length; i++) {
+      const welcome = welcomes[i],
+        delta = deltas[i];
+      if (welcome.type !== 'welcome' || delta.type !== 'delta')
+        throw new Error('Unexpected protocol');
+      const start = welcome.players.find((p) => p.id === welcome.selfId)!;
+      expect(office.world.connections.get(start.id)!.player.x).toBe(start.x + 32);
+      expect(delta.changedPlayers.length).toBeGreaterThan(1);
+    }
+  } finally {
+    await Promise.all(
+      clients.map(
+        (c) =>
+          new Promise<void>((resolve) => {
+            c.socket.once('close', () => resolve());
+            c.socket.close();
+          }),
+      ),
+    );
+  }
+});
+
+it('rejects unauthenticated/cross-origin socket upgrades and revokes a live socket on logout', async () => {
+  const address = office.app.server.address() as { port: number };
+  const rejected = (cookie: string, requestOrigin: string) =>
+    new Promise<number>((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${address.port}/ws`, {
+        origin: requestOrigin,
+        headers: { cookie },
+      });
+      ws.on('error', reject);
+      ws.on('unexpected-response', (request, response) => {
+        resolve(response.statusCode!);
+        response.resume();
+        request.destroy();
+      });
+    });
+  expect(await rejected('', origin)).toBe(401);
+  expect(await rejected(ownerCookie, 'http://attacker.test')).toBe(403);
+  const token = (await store.redeem(
+    await store.invite(id, 'logout@example.test', 'Logout test', raw),
+  ))!;
+  office.world.updateMembers(await store.members(id), await store.desks(id));
+  const cookie = `office_session=${token}`,
+    client = connect(cookie);
+  await client.next((m) => m.type === 'welcome');
+  const closed = new Promise<number>((resolve) =>
+    client.socket.once('close', (code) => resolve(code)),
+  );
+  expect(
+    (
+      await office.app.inject({
+        method: 'POST',
+        url: '/api/logout',
+        headers: headers(cookie),
+        payload: {},
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect(await closed).toBe(4003);
+  expect(await store.identity(token)).toBeNull();
+});
+
+it('authorizes workspace membership, not just a valid session', async () => {
+  const other = randomUUID();
+  await store.ensureWorkspace(other, raw);
+  const token = await store.bootstrap(other, 'outsider@example.test', 'Outsider', raw);
+  expect(
+    (await office.app.inject({ url: '/api/session', headers: headers(`office_session=${token}`) }))
+      .statusCode,
+  ).toBe(401);
+});

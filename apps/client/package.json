@@ -1,0 +1,19 @@
+{
+  "name": "@office/client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@office/shared": "*",
+    "phaser": "^3.90.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5",
+    "@vitejs/plugin-react": "^5.0.3"
+  }
+}

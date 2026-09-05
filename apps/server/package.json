@@ -1,0 +1,18 @@
+{
+  "name": "@office/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cd ../.. && tsx watch apps/server/src/main.ts",
+    "build": "cd ../.. && esbuild apps/server/src/main.ts --bundle --platform=node --format=esm --packages=external --alias:@office/shared=./packages/shared/src/index.ts --outfile=dist/server.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^10.1.3",
+    "@office/shared": "*",
+    "fastify": "^5.6.0",
+    "pg": "^8.16.3",
+    "ws": "^8.18.3"
+  }
+}

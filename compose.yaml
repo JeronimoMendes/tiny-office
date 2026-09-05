@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: office
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-office}
+      POSTGRES_DB: office
+    volumes:
+      - office-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U office -d office']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      DATABASE_URL: postgres://office:${POSTGRES_PASSWORD:-office}@db:5432/office
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      BOOTSTRAP_SECRET: ${BOOTSTRAP_SECRET:-}
+      WORKSPACE_ID: ${WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}
+      MAP_FILE: ${MAP_FILE:-maps/office.tmj}
+    ports:
+      - '${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000'
+    volumes:
+      - ./maps:/app/maps:ro
+      - ./assets:/app/assets:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    stop_grace_period: 15s
+volumes:
+  office-data:
