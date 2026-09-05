@@ -438,10 +438,56 @@ form .primary {
 }
 .availability {
   display: flex;
+  grid-template-columns: auto 1fr;
   gap: 7px;
   align-items: center;
   font-size: 11px;
   color: #ccd4bf;
+  margin: 0;
+}
+.availability select {
+  width: 116px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.media-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.media-controls button {
+  padding: 7px 9px;
+  font-size: 10px;
+}
+.media-controls button[aria-pressed='true'] {
+  background: #c5d2b4;
+  color: #2c3c30;
+}
+.media-controls small {
+  max-width: 110px;
+  line-height: 1.3;
+}
+.media-tracks {
+  position: fixed;
+  left: 22px;
+  bottom: 145px;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+.media-tracks video {
+  width: 180px;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #1c2821;
+  border: 1px solid #d3ddbc33;
+  box-shadow: 0 6px 28px #1b251e70;
+}
+.media-tracks audio {
+  display: none;
 }
 .movement-hint {
   text-align: center;

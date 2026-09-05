@@ -39,7 +39,17 @@ if (!(await pool.query('SELECT 1 FROM workspaces WHERE id=$1', [workspaceId])).r
 const bootstrapSecret = process.env.BOOTSTRAP_SECRET || newSecret();
 if (!(await store.hasOwner(workspaceId)))
   console.log(`\nClaim your workspace at ${origin}\nBootstrap secret: ${bootstrapSecret}\n`);
-const { app } = await createApp(store, { workspaceId, origin, bootstrapSecret });
+const { app } = await createApp(store, {
+  workspaceId,
+  origin,
+  bootstrapSecret,
+  livekit: {
+    apiUrl: process.env.LIVEKIT_URL,
+    wsUrl: process.env.LIVEKIT_WS_URL,
+    apiKey: process.env.LIVEKIT_API_KEY,
+    apiSecret: process.env.LIVEKIT_API_SECRET,
+  },
+});
 await app.listen({ port, host: '0.0.0.0' });
 let closing = false;
 async function shutdown() {

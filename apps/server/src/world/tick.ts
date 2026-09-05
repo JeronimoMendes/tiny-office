@@ -33,6 +33,7 @@ export class World {
   private changed = new Set<string>();
   private removed = new Set<string>();
   private writer: PositionWriter;
+  private mediaPolicyChanged: (() => void) | null = null;
   tickNumber = 0;
 
   constructor(
@@ -45,6 +46,9 @@ export class World {
       throw new Error('Spawn is blocked');
     this.writer = new PositionWriter(store, workspace.id);
     for (const member of members) this.restoreMember(member);
+  }
+  setMediaPolicyChangeHandler(handler: () => void) {
+    this.mediaPolicyChanged = handler;
   }
   private restoreMember(member: SavedMember) {
     const restored = { ...member };
@@ -83,6 +87,7 @@ export class World {
     old?.peer.close(4001, 'Opened in another tab or device');
     this.removed.delete(userId);
     this.changed.add(userId);
+    this.mediaPolicyChanged?.();
     peer.send({
       type: 'welcome',
       version: PROTOCOL_VERSION,
@@ -111,6 +116,7 @@ export class World {
     this.connections.delete(userId);
     this.changed.delete(userId);
     this.removed.add(userId);
+    this.mediaPolicyChanged?.();
   }
   revokeSession(hash: string) {
     for (const [id, c] of this.connections)
@@ -131,6 +137,7 @@ export class World {
           status: member.status,
         });
         this.changed.add(member.id);
+        if (c.player.status !== existing?.status) this.mediaPolicyChanged?.();
       }
     }
     this.workspace.desks = desks;
@@ -168,6 +175,7 @@ export class World {
         zoneId !== previous.zoneId
       ) {
         c.player = { ...previous, ...motion, zoneId };
+        if (zoneId !== previous.zoneId) this.mediaPolicyChanged?.();
         this.changed.add(id);
         const member = this.members.get(id)!;
         member.x = motion.x;

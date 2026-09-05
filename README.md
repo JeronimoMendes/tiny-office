@@ -1,8 +1,8 @@
 # Tiny Office
 
-A small self-hosted, top-down virtual office. **Phase 1: movement and space.** React UI, Phaser pixel-art renderer, authoritative WebSockets, PostgreSQL persistence. Architecture and phase gates: [PLAN.md](PLAN.md).
+A small self-hosted, top-down virtual office. **Phase 2: audio/video.** React UI, Phaser pixel-art renderer, authoritative WebSockets, PostgreSQL persistence and a self-hosted LiveKit SFU. Architecture and phase gates: [PLAN.md](PLAN.md).
 
-Implemented: multiple players, 4-direction animated characters, collision, local prediction/reconciliation, remote interpolation, server-computed zones, owner-assigned desks, profiles, personal login links, reconnect and restart restoration. No audio/video, status editing, moods, chat or screen sharing yet. The visible availability dot currently reflects persisted status, defaulting to free.
+Implemented: phase-1 movement and space, editable availability, and zone-based calls. Walking into a desk or meeting room joins that zone's conversation; the open floor is silent. Focus blocks incoming media and video while still allowing an explicit unmute. DND is excluded from media entirely. Every media decision comes from the authoritative server position and status: each zone is its own SFU room, credentials name one room and last two minutes, and the server reconciles LiveKit membership and publish permissions, disconnecting anyone whose permissions exceed current policy. Moods, chat and screen sharing are not implemented.
 
 ## Start locally
 
@@ -39,18 +39,35 @@ Anyone with server/DB administration access is already trusted. This recovery pa
 
 Optional: copy `.env.example` to `.env`. Compose reads it; host-side Node commands require exported variables.
 
-| Variable            | Default                                          | Purpose                                                                                                                           |
-| ------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `APP_ORIGIN`        | `http://localhost:3000`                          | Exact browser origin; HTTP mutations and WebSocket upgrades enforce it                                                            |
-| `APP_PORT`          | `3000`                                           | Published host port; change APP_ORIGIN to match                                                                                   |
-| `BIND_ADDRESS`      | `127.0.0.1`                                      | Local-only by default                                                                                                             |
-| `POSTGRES_PASSWORD` | `office`                                         | Local dev credential; change for deployment (use URL-safe characters, or override the Compose DB URL with a properly encoded URL) |
-| `BOOTSTRAP_SECRET`  | random, printed once per unclaimed boot          | Optional fixed first-owner claim secret                                                                                           |
-| `DATABASE_URL`      | `postgres://office:office@localhost:5432/office` | Host-side server/CLI database; Compose supplies its own DB URL                                                                    |
-| `WORKSPACE_ID`      | `00000000-0000-4000-8000-000000000001`           | One process owns this workspace; UI exposes only that workspace                                                                   |
-| `MAP_FILE`          | `maps/office.tmj`                                | Initial seed only; existing workspaces use the database revision                                                                  |
+| Variable               | Default                                          | Purpose                                                                                                                           |
+| ---------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ORIGIN`           | `http://localhost:3000`                          | Exact browser origin; HTTP mutations and WebSocket upgrades enforce it                                                            |
+| `APP_PORT`             | `3000`                                           | Published host port; change APP_ORIGIN to match                                                                                   |
+| `BIND_ADDRESS`         | `127.0.0.1`                                      | Local-only by default                                                                                                             |
+| `POSTGRES_PASSWORD`    | `office`                                         | Local dev credential; change for deployment (use URL-safe characters, or override the Compose DB URL with a properly encoded URL) |
+| `BOOTSTRAP_SECRET`     | random, printed once per unclaimed boot          | Optional fixed first-owner claim secret                                                                                           |
+| `DATABASE_URL`         | `postgres://office:office@localhost:5432/office` | Host-side server/CLI database; Compose supplies its own DB URL                                                                    |
+| `WORKSPACE_ID`         | `00000000-0000-4000-8000-000000000001`           | One process owns this workspace; UI exposes only that workspace                                                                   |
+| `MAP_FILE`             | `maps/office.tmj`                                | Initial seed only; existing workspaces use the database revision                                                                  |
+| `LIVEKIT_WS_URL`       | `ws://localhost:7880`                            | Browser-facing LiveKit signaling URL; use `wss://` with HTTPS                                                                     |
+| `LIVEKIT_API_KEY`      | `devkey`                                         | LiveKit API key, shared by the app and the SFU; replace for deployment                                                            |
+| `LIVEKIT_API_SECRET`   | `secret`                                         | LiveKit API secret; replace for deployment (32+ characters)                                                                       |
+| `LIVEKIT_BIND_ADDRESS` | `127.0.0.1`                                      | Address publishing the LiveKit TCP/UDP ports                                                                                      |
+| `LIVEKIT_NODE_IP`      | `127.0.0.1`                                      | Address LiveKit advertises to browsers; the public IP when deployed                                                               |
 
-For coworker access, put an HTTPS reverse proxy in front of port 3000, forward `/ws` WebSocket upgrades, and set APP_ORIGIN to the public HTTPS origin. Use real secrets and database backups; do not expose PostgreSQL or the development server publicly. No media ports are required in phase 1. LiveKit, UDP/TURN and HTTPS media deployment will be added in phase 2.
+### Deploying media: HTTPS, UDP and TURN
+
+Browsers only grant microphone and camera access on a secure origin, so any deployment beyond localhost needs HTTPS.
+
+- Put a TLS reverse proxy in front of the app, forward `/ws` upgrades, and set `APP_ORIGIN` to the public `https://` origin.
+- Terminate TLS for LiveKit signaling too and set `LIVEKIT_WS_URL` to that public `wss://` endpoint. A page served over HTTPS cannot open a plain `ws://` SFU connection.
+- Replace `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; the SFU reads the same pair through `LIVEKIT_KEYS`, so app and SFU stay in step. They are the only credential protecting room administration.
+- Media itself is UDP. Publish `7882/udp` (and `7881/tcp` as a fallback) to the internet, set `LIVEKIT_BIND_ADDRESS=0.0.0.0`, set `LIVEKIT_NODE_IP` to the public address, or drop `--node-ip` from `compose.yaml` and set `use_external_ip: true` in [deploy/livekit.yaml](deploy/livekit.yaml).
+- Clients behind firewalls that block outbound UDP need TURN. Uncomment the `turn` block in `deploy/livekit.yaml`, point it at a certificate for your domain, and publish `5349/tcp` (443 is the port most likely to be allowed) plus `3478/udp`.
+
+On Linux hosts, raise the UDP buffers LiveKit asks for at startup (`net.core.rmem_max`/`wmem_max` of about 5 MB); the default is too small for several concurrent calls.
+
+Verify each path from a network you do not control: a call between two networks confirms UDP, and LiveKit's [connection tester](https://livekit.io/connection-test) reports whether it fell back to TURN. Do not expose PostgreSQL.
 
 The Compose app runs as a non-root user. The image intentionally retains source/dev tools for map import, owner recovery and the small project's test workflow; a split production-only image can be added when deployment size matters.
 
@@ -119,12 +136,14 @@ Node 22.12+ and npm, plus PostgreSQL 16:
 
 ```sh
 npm ci
-docker compose -f compose.yaml -f compose.dev.yaml up -d db
+docker compose -f compose.yaml -f compose.dev.yaml up -d db livekit
 DATABASE_URL=postgres://office:office@localhost:5432/office \
-  APP_ORIGIN=http://localhost:5173 npm run dev
+  APP_ORIGIN=http://localhost:5173 \
+  LIVEKIT_URL=http://localhost:7880 LIVEKIT_WS_URL=ws://localhost:7880 \
+  LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret npm run dev
 ```
 
-Open http://localhost:5173. Stop any Compose app first (`docker compose stop app`); only one server can own a workspace. The optional Compose override exposes PostgreSQL on loopback for host-side development. `npm run build && npm start` serves the production build from port 3000.
+Open http://localhost:5173. Stop any Compose app first (`docker compose stop app`); only one server can own a workspace. Media needs the `livekit` service running, and the credentials above must match the ones it started with. The optional Compose override exposes PostgreSQL on loopback for host-side development. `npm run build && npm start` serves the production build from port 3000.
 
 ### Code map
 
@@ -175,13 +194,13 @@ E2E_ALLOW_BOOTSTRAP=1 npm run test:e2e
 docker compose -p office-e2e down -v
 ```
 
-Coverage: 18 unit tests, 8 PostgreSQL/real-WebSocket integration tests and 1 two-browser end-to-end test. These cover zone boundaries and map validation, movement authority/input abuse, serialized/debounced persistence including failure retries, single-use link redemption, role/workspace/origin authorization, profile/desks and empty-server restoration, 30 simultaneous socket clients, and two independently authenticated browsers. The 30-client check is a local functional smoke test, not a WAN latency benchmark. There are no renderer unit tests or screenshot assertions. Media policy/revocation tests belong to phase 2, before any media is enabled.
+Coverage: 26 unit tests, 9 PostgreSQL/real-WebSocket integration tests and 1 two-browser end-to-end test. These cover zone boundaries and map validation, movement authority/input abuse, serialized/debounced persistence including failure retries, single-use link redemption, role/workspace/origin authorization, profile/desks and empty-server restoration, and 30 simultaneous socket clients. For media they cover the policy decisions themselves, SFU reconciliation against a fake room service, zone-scoped credential contents over real HTTP/WebSockets, revocation on focus/DND/zone changes, and two browsers actually exchanging audio and video through the SFU using Chromium's fake devices. The 30-client check is a local functional smoke test, not a WAN latency benchmark. There are no renderer unit tests or screenshot assertions.
 
-## Confirmed phase 2 behavior (not implemented yet)
+## How calls work
 
-- **Your current zone determines your conversation.** Each desk or meeting zone has one conversation shared by its occupants. A person belongs to at most one conversation group at a time; moving zones switches conversations.
+- **Your current zone determines your conversation.** Each desk or meeting zone is its own SFU room, shared by its occupants. A person belongs to at most one conversation at a time; moving zones switches rooms.
 - Desk owners are **never summoned remotely**. They participate only when physically inside that desk zone, just like anyone else.
 - Meeting rooms have no distance falloff. Open floor stays silent, with no proximity chat.
 - Focus joins muted by default, suppresses incoming audio and disables video. Users may explicitly unmute their microphone while staying focused; incoming audio and video remain disabled.
 
-DND's absolute media restriction is non-negotiable: phase 2 must enforce it at the SFU and exclude DND users from media negotiation, not merely mute UI controls. Screen sharing is deferred unless explicitly added to scope.
+DND's absolute media restriction is enforced at the SFU, not by muting UI controls: a DND member is refused a credential and removed from the room, so no media is negotiated at all. Nothing published in a zone is reachable from outside it, because the credential names a single room and browsers never receive one for another zone. Screen sharing is deferred unless explicitly added to scope.

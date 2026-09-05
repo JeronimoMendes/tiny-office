@@ -5,7 +5,7 @@
 Simple core, maintainability, then scale. Finish and verify each phase end to end before starting the next. Target 20–30 users per workspace and a 15 Hz authoritative simulation. No distributed simulation, plugins, feature flags, Redis, or generic event bus.
 
 1. **Movement and space (complete):** owner bootstrap and owner-distributed personal login links; persistent Tiled map, desks and zones; authoritative movement, local prediction/reconciliation and remote interpolation; editable profile; restart/rejoin restoration; Docker Compose, README and expensive-path tests.
-2. **Audio/video:** self-hosted LiveKit SFU, strictly zone-based calls, server-enforced media permissions and revocation. Validate multi-browser calls before proceeding.
+2. **Audio/video (complete):** self-hosted LiveKit SFU, strictly zone-based calls, server-enforced media permissions and revocation, validated with two real browsers.
 3. **Presence:** free/focus/DND controls and visible indicators, cosmetic moods. Status is persisted from phase 1; media enforcement belongs in phase 2, not phase 3.
 4. **Chat:** persisted workspace and direct messages with authorization. No chat machinery in the movement loop.
 
@@ -60,7 +60,7 @@ Versioned, runtime-validated JSON over same-origin authenticated WebSockets.
 
 ## Media seam and confirmed phase 2 policy
 
-Proposed transport: one SFU room per workspace with server-managed per-participant publish/subscribe permissions. An SFU room is a transport container, not permission to hear every workspace conversation. Clients cannot subscribe around server policy.
+Transport as built: **one SFU room per zone**, not one per workspace. The proposed single-room design cannot hold its own guarantee on LiveKit: a participant granted `canSubscribe: false` rejects every subscription, including the ones the server installs itself, so server-driven per-track subscriptions require granting the browser blanket subscribe permission, and LiveKit exposes no server API for per-publisher subscription allow-lists. Naming one room per zone enforces the same rule in the credential: a token grants `roomJoin` for exactly the zone the server computed, lives two minutes, and carries only the sources policy allows. A client cannot subscribe around server policy because it never holds a credential for another conversation.
 
 Confirmed by the user:
 
@@ -100,8 +100,17 @@ Phase 2 adds media permission decision tests and integration tests proving revoc
 - Manually inspected the rendered office. No renderer tests were added.
 - Remaining limits: the starter map has eight desks (editable in Tiled); the 30-client check is a local functional smoke test, not a WAN latency/load benchmark. Severe jitter may slow movement because the server never invents missing input steps. Phaser accounts for most of the roughly 1.5 MB minified client bundle; code splitting is deferred.
 
-Phase 2 has not started; the conversation and focus policy questions are now resolved above.
+Phase 2 is complete; phase 3 may start.
 
 ## Acceptance for phase 1
 
 `docker compose up --build` serves the app and durable database; README explains setup, owner bootstrap, link distribution, map editing/import and restart semantics. Two browser sessions can walk around the same map with collisions, server zones, animation and name labels; desks are owner-assignable; character and display name changes persist. State survives an empty workspace and server restart. Typecheck, build, unit, database and browser checks pass (or unavailable checks are explicitly reported).
+
+## Phase 2 verification receipt
+
+- 26 unit tests pass, including media policy decisions (open-floor silence, focus, DND, per-zone rooms) and SFU reconciliation against a fake room service: wrong-room removal, revocation on downgrade, in-place permission upgrades, and no SFU calls while no conversation can exist.
+- 9 PostgreSQL/real-WebSocket integration tests pass. The media test walks three authenticated members into two different zones and asserts the issued JWT grants (`room`, `canSubscribe`, `canPublishSources`), that a different zone yields a different room, and that focus, DND, an over-broad grant and leaving the zone each remove the participant from the SFU within the reconciliation loop.
+- The two-browser Playwright test now exchanges real media through the SFU using Chromium's fake devices: bidirectional video inside one desk zone, focus losing incoming video while its explicit unmute still reaches a free coworker, DND revoking the live audio track and being refused a new credential, returning to free reconnecting, and walking onto the open floor revoking the conversation.
+- Deployment: the SFU runs from [deploy/livekit.yaml](deploy/livekit.yaml) rather than `--dev`, so operator-set API credentials are actually used; the end-to-end run was verified with non-default credentials, and LiveKit reported the selected ICE candidate as `udp4 127.0.0.1:7882`, confirming media over UDP rather than a TCP fallback. HTTPS/`wss`, the public UDP path and TURN are documented in the README with a verification procedure.
+- Typecheck, formatting check, production build, Docker build/Compose startup and npm audit pass.
+- Remaining limits: HTTPS, WAN UDP and TURN are documented and locally exercised only over loopback; a real deployment must verify them from separate networks, since no public host was available here. Cross-zone isolation is proven by unit and integration tests and by the credential itself, not by a third browser. Media reconciliation polls the SFU every two seconds as a safety net behind zone/status events, so a permission downgrade is revoked in milliseconds in practice but within two seconds in the worst case. Screen sharing and moods remain out of scope.

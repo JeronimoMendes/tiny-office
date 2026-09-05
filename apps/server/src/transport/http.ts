@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { inviteSchema, profileSchema } from '@office/shared';
+import { inviteSchema, profileSchema, statusSchema } from '@office/shared';
 import { equalSecret, hashSecret } from '../auth/secrets';
 import type { Store, Identity } from '../persistence/store';
 import type { World } from '../world/tick';
+import type { LiveKitMedia } from '../media/livekit';
 
 export function httpRoutes(
   app: FastifyInstance,
@@ -11,6 +12,7 @@ export function httpRoutes(
   world: World,
   origin: string,
   bootstrapSecret: string,
+  media: LiveKitMedia,
 ) {
   const cookieOptions = {
     httpOnly: true,
@@ -114,6 +116,18 @@ export function httpRoutes(
     await store.profile(session.userId, body.displayName, body.character);
     await refresh();
     return { ok: true };
+  });
+  app.patch('/api/status', async (req) => {
+    const session = await identity(req);
+    const { status } = z.object({ status: statusSchema }).strict().parse(req.body);
+    await store.status(world.workspace.id, session.userId, status);
+    await refresh();
+    media.schedule();
+    return { ok: true };
+  });
+  app.get('/api/media/token', async (req) => {
+    const session = await identity(req);
+    return media.token(session.userId);
   });
   app.put('/api/desks/:zoneId', async (req) => {
     await identity(req, true);

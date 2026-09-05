@@ -9,10 +9,18 @@ import type { Store } from './persistence/store';
 import { World } from './world/tick';
 import { httpRoutes } from './transport/http';
 import { websocketTransport } from './transport/websocket';
+import { LiveKitMedia, type MediaRoomService } from './media/livekit';
 
 export async function createApp(
   store: Store,
-  options: { workspaceId: string; origin: string; bootstrapSecret: string; logger?: boolean },
+  options: {
+    workspaceId: string;
+    origin: string;
+    bootstrapSecret: string;
+    logger?: boolean;
+    livekit?: { apiUrl?: string; wsUrl?: string; apiKey?: string; apiSecret?: string };
+    mediaService?: MediaRoomService;
+  },
 ) {
   const app = Fastify({ logger: options.logger ?? true, bodyLimit: 16384, requestTimeout: 10000 });
   await app.register(cookie);
@@ -22,7 +30,10 @@ export async function createApp(
     await store.members(options.workspaceId),
     store,
   );
-  httpRoutes(app, store, world, options.origin, options.bootstrapSecret);
+  const media = new LiveKitMedia(world, options.livekit ?? {}, options.mediaService);
+  world.setMediaPolicyChangeHandler(media.schedule);
+  media.start();
+  httpRoutes(app, store, world, options.origin, options.bootstrapSecret, media);
   const stopSockets = websocketTransport(app, store, world, options.origin);
   await app.register(fastifyStatic, {
     root: resolve('assets'),
@@ -57,6 +68,7 @@ export async function createApp(
     clearInterval(tick);
     clearInterval(flush);
     clearInterval(cleanup);
+    media.stop();
     await stopSockets();
     await world.flush();
   });

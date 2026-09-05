@@ -3,7 +3,8 @@ import type { Player, ServerMessage, SessionInfo } from '@office/shared';
 
 function observePlayers(page: Page) {
   const players = new Map<string, Player>();
-  page.on('websocket', (socket) =>
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).pathname !== '/ws') return;
     socket.on('framereceived', ({ payload }) => {
       const message = JSON.parse(payload.toString()) as ServerMessage;
       if (message.type === 'welcome') {
@@ -14,8 +15,8 @@ function observePlayers(page: Page) {
         for (const id of message.removedPlayerIds) players.delete(id);
         for (const p of message.changedPlayers) players.set(p.id, p);
       }
-    }),
-  );
+    });
+  });
   return players;
 }
 
@@ -88,8 +89,63 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   const saved = { ...ownerPlayers.get(owner.id)! };
   expect(saved.y).toBe(start.y);
 
-  const bobStart = coworkerPlayers.get(bob.id)!;
+  // Both enter one authoritative call zone. Browser media uses Chromium's fake
+  // microphone/camera so this verifies a real SFU connection without host devices.
   await coworker.locator('.map-stage').click({ position: { x: 600, y: 450 } });
+  await coworker.keyboard.down('ArrowRight');
+  await expect.poll(() => coworkerPlayers.get(bob.id)?.zoneId).toBe('desk-7');
+  await coworker.keyboard.up('ArrowRight');
+  await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeEnabled();
+  await expect(coworker.getByRole('button', { name: 'Video', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(page.locator('video[data-local]')).toHaveCount(1);
+  await expect(coworker.locator(`video[data-participant="${owner.id}"]`)).toHaveCount(1, {
+    timeout: 10_000,
+  });
+
+  // Focus gets no incoming tracks or camera grant, but explicit microphone
+  // publication remains available to free coworkers in the same zone.
+  await coworker.getByLabel('Availability').selectOption('focus');
+  await expect(coworker.getByText('Focused · incoming media off')).toBeVisible();
+  await expect(coworker.getByRole('button', { name: 'Video', exact: true })).toBeDisabled();
+  await expect(coworker.locator(`video[data-participant="${owner.id}"]`)).toHaveCount(0);
+  await coworker.getByRole('button', { name: 'Mic', exact: true }).click();
+  await expect(page.locator(`audio[data-participant="${bob.id}"]`)).toHaveCount(1, {
+    timeout: 10_000,
+  });
+
+  // DND disconnects from LiveKit, revokes the remote track and cannot obtain a
+  // fresh credential even while the avatar remains in the call zone.
+  await coworker.getByLabel('Availability').selectOption('do-not-disturb');
+  await expect(coworker.getByText('Media off in DND')).toBeVisible();
+  await expect(page.locator(`audio[data-participant="${bob.id}"]`)).toHaveCount(0, {
+    timeout: 10_000,
+  });
+  expect((await (await coworker.request.get('/api/media/token')).json()).enabled).toBe(false);
+
+  // Returning free reconnects. Leaving the zone then revokes the conversation.
+  await coworker.getByLabel('Availability').selectOption('free');
+  await expect(coworker.getByRole('button', { name: 'Video', exact: true })).toBeEnabled();
+  await expect(coworker.locator(`video[data-participant="${owner.id}"]`)).toHaveCount(1, {
+    timeout: 10_000,
+  });
+  await coworker.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(page.locator(`video[data-participant="${bob.id}"]`)).toHaveCount(1, {
+    timeout: 10_000,
+  });
+  await coworker.keyboard.down('ArrowLeft');
+  await expect.poll(() => coworkerPlayers.get(bob.id)?.zoneId).toBeNull();
+  await coworker.keyboard.up('ArrowLeft');
+  await expect(coworker.getByText('Open floor is quiet')).toBeVisible();
+  await expect(page.locator(`video[data-participant="${bob.id}"]`)).toHaveCount(0, {
+    timeout: 10_000,
+  });
+
+  // Outside the zone the credential itself is refused while the owner keeps
+  // publishing inside it; cross-zone isolation is covered by the server tests.
+  expect((await (await coworker.request.get('/api/media/token')).json()).enabled).toBe(false);
+
+  const bobStart = coworkerPlayers.get(bob.id)!;
   await coworker.keyboard.down('w');
   await expect.poll(() => ownerPlayers.get(bob.id)?.y).toBeLessThan(bobStart.y - 48);
   await coworker.keyboard.up('w');

@@ -13,6 +13,18 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+  livekit:
+    image: livekit/livekit-server:v1.9.10
+    restart: unless-stopped
+    command: --config /etc/livekit/livekit.yaml --bind 0.0.0.0 --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
+    environment:
+      LIVEKIT_KEYS: '${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}'
+    volumes:
+      - ./deploy/livekit.yaml:/etc/livekit/livekit.yaml:ro
+    ports:
+      - '${LIVEKIT_BIND_ADDRESS:-127.0.0.1}:7880:7880'
+      - '${LIVEKIT_BIND_ADDRESS:-127.0.0.1}:7881:7881'
+      - '${LIVEKIT_BIND_ADDRESS:-127.0.0.1}:7882:7882/udp'
   app:
     build: .
     restart: unless-stopped
@@ -23,6 +35,10 @@ services:
       BOOTSTRAP_SECRET: ${BOOTSTRAP_SECRET:-}
       WORKSPACE_ID: ${WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}
       MAP_FILE: ${MAP_FILE:-maps/office.tmj}
+      LIVEKIT_URL: http://livekit:7880
+      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:-ws://localhost:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
     ports:
       - '${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000'
     volumes:
@@ -31,6 +47,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      livekit:
+        condition: service_started
     stop_grace_period: 15s
 volumes:
   office-data:

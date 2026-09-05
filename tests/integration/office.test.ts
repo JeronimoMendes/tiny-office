@@ -6,7 +6,14 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import { Store, DEFAULT_WORKSPACE_ID } from '../../apps/server/src/persistence/store';
 import { createApp } from '../../apps/server/src/app';
 import { World } from '../../apps/server/src/world/tick';
-import type { ServerMessage } from '@office/shared';
+import type { MediaRoomService } from '../../apps/server/src/media/livekit';
+import {
+  TrackSource,
+  type ParticipantInfo,
+  type ParticipantPermission,
+  type Room as LiveKitRoom,
+} from 'livekit-server-sdk';
+import type { ServerMessage, Status } from '@office/shared';
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url)
@@ -380,4 +387,173 @@ it('authorizes workspace membership, not just a valid session', async () => {
     (await office.app.inject({ url: '/api/session', headers: headers(`office_session=${token}`) }))
       .statusCode,
   ).toBe(401);
+});
+
+class FakeSfu implements MediaRoomService {
+  rooms = new Map<string, ParticipantInfo[]>();
+  removed: Array<{ room: string; identity: string }> = [];
+  join(room: string, identity: string, permission: Partial<ParticipantPermission>) {
+    this.rooms.set(room, [
+      ...(this.rooms.get(room) ?? []),
+      { identity, sid: `PA_${identity}`, name: '', permission } as ParticipantInfo,
+    ]);
+  }
+  present(room: string, identity: string) {
+    return (this.rooms.get(room) ?? []).some((p) => p.identity === identity);
+  }
+  async listRooms() {
+    return [...this.rooms.keys()].map((name) => ({ name }) as LiveKitRoom);
+  }
+  async listParticipants(room: string) {
+    return this.rooms.get(room) ?? [];
+  }
+  async removeParticipant(room: string, identity: string) {
+    this.removed.push({ room, identity });
+    this.rooms.set(
+      room,
+      (this.rooms.get(room) ?? []).filter((p) => p.identity !== identity),
+    );
+  }
+  async updateParticipant(room: string, identity: string) {
+    return this.rooms.get(room)!.find((p) => p.identity === identity)!;
+  }
+}
+
+const grant = (token: string) =>
+  JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).video;
+const until = async (predicate: () => boolean, message: string) => {
+  for (let attempt = 0; attempt < 150; attempt++) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(message);
+};
+
+it('scopes media credentials to the authoritative zone and revokes them from the server', async () => {
+  const sfu = new FakeSfu();
+  const member = async (email: string, x: number, y: number) => {
+    const token = (await store.redeem(await store.invite(id, email, email, raw)))!;
+    const user = (await store.members(id)).find((m) => m.email === email)!;
+    await store.savePositions(id, [{ id: user.id, x, y }]);
+    return { id: user.id, cookie: `office_session=${token}` };
+  };
+  // Two people share Desk 7; a third sits in the Cedar meeting room.
+  const alice = await member('media-alice@example.test', 800, 608);
+  const bob = await member('media-bob@example.test', 832, 608);
+  const cara = await member('media-cara@example.test', 144, 104);
+  const desk = `workspace-${id}-zone-desk-7`;
+
+  const media = await createApp(store, {
+    workspaceId: id,
+    origin,
+    bootstrapSecret: 'media-test',
+    logger: false,
+    livekit: {
+      apiUrl: 'http://livekit.test',
+      wsUrl: 'wss://livekit.test',
+      apiKey: 'devkey',
+      apiSecret: 'devsecret-devsecret-devsecret',
+    },
+    mediaService: sfu,
+  });
+  await media.app.listen({ port: 0, host: '127.0.0.1' });
+  const address = media.app.server.address() as { port: number };
+  const sockets = [alice, bob, cara].map(
+    (person) =>
+      new WebSocket(`ws://127.0.0.1:${address.port}/ws`, {
+        origin,
+        headers: { cookie: person.cookie },
+      }),
+  );
+  const token = async (person: { cookie: string }) =>
+    (await media.app.inject({ url: '/api/media/token', headers: headers(person.cookie) })).json();
+  const status = (person: { cookie: string }, value: Status) =>
+    media.app.inject({
+      method: 'PATCH',
+      url: '/api/status',
+      headers: headers(person.cookie),
+      payload: { status: value },
+    });
+
+  try {
+    await Promise.all(sockets.map((s) => new Promise((r) => s.once('open', r))));
+    await until(
+      () => media.world.connections.get(alice.id)?.player.zoneId === 'desk-7',
+      'Players never reached their zones',
+    );
+    expect(media.world.connections.get(cara.id)!.player.zoneId).toBe('cedar');
+
+    // A credential names exactly one zone room and carries only allowed sources.
+    const free = await token(alice);
+    expect(free).toMatchObject({ enabled: true, url: 'wss://livekit.test', room: desk });
+    expect(grant(free.token)).toMatchObject({
+      room: desk,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: false,
+      canPublishSources: ['microphone', 'camera'],
+    });
+    // Conversations are isolated: another zone is a different room entirely.
+    expect((await token(cara)).room).toBe(`workspace-${id}-zone-cedar`);
+
+    // An SFU permission wider than policy is revoked even in the right zone:
+    // LiveKit reads an empty source list as "may publish anything".
+    sfu.join(desk, alice.id, { canPublish: true, canSubscribe: true, canPublishSources: [] });
+    await until(() => !sfu.present(desk, alice.id), 'An over-broad grant was left in place');
+
+    const inZone = {
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: false,
+      canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
+    };
+    sfu.join(desk, alice.id, inZone);
+    sfu.join(desk, bob.id, inZone);
+
+    // Focus keeps the conversation but loses incoming media and video, so the
+    // SFU permission it already holds is revoked by disconnection.
+    await status(bob, 'focus');
+    await until(() => !sfu.present(desk, bob.id), 'Focus did not revoke SFU access');
+    const focused = await token(bob);
+    expect(grant(focused.token)).toMatchObject({
+      room: desk,
+      canPublish: true,
+      canSubscribe: false,
+      canPublishSources: ['microphone'],
+    });
+    sfu.join(desk, bob.id, {
+      canPublish: true,
+      canSubscribe: false,
+      canPublishData: false,
+      canPublishSources: [TrackSource.MICROPHONE],
+    });
+
+    // DND is excluded from media entirely: removed from the room and refused a
+    // new credential while standing in the same zone.
+    await status(bob, 'do-not-disturb');
+    await until(() => !sfu.present(desk, bob.id), 'DND did not revoke SFU access');
+    expect(media.world.connections.get(bob.id)!.player.zoneId).toBe('desk-7');
+    expect(await token(bob)).toMatchObject({ enabled: false });
+    expect((await store.members(id)).find((m) => m.id === bob.id)!.status).toBe('do-not-disturb');
+
+    // Walking onto the open floor ends the conversation.
+    for (let seq = 1; seq <= 3; seq++)
+      sockets[0].send(JSON.stringify({ type: 'input', seq, direction: 'up' }));
+    await until(
+      () => media.world.connections.get(alice.id)?.player.zoneId === null,
+      'Alice never left the desk zone',
+    );
+    await until(() => !sfu.present(desk, alice.id), 'Leaving the zone did not revoke SFU access');
+    expect(await token(alice)).toMatchObject({ enabled: false });
+    expect(sfu.removed.map((entry) => entry.identity)).toEqual([
+      alice.id,
+      bob.id,
+      bob.id,
+      alice.id,
+    ]);
+  } finally {
+    for (const socket of sockets) socket.close();
+    await media.app.close();
+  }
 });

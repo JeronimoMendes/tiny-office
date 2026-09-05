@@ -204,6 +204,13 @@ export class Store {
       character,
     ]);
   }
+  async status(workspaceId: string, userId: string, status: Member['status']) {
+    await this.pool.query('UPDATE memberships SET status=$3 WHERE workspace_id=$1 AND user_id=$2', [
+      workspaceId,
+      userId,
+      status,
+    ]);
+  }
   async assignDesk(workspaceId: string, zoneId: string, userId: string | null) {
     await this.transaction(async (db) => {
       // Serialize owner edits; each person has at most one desk.

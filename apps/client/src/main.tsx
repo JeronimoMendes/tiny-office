@@ -1,10 +1,14 @@
-import React, { useEffect, useState, useSyncExternalStore, useRef } from 'react';
+import React, { lazy, Suspense, useEffect, useState, useSyncExternalStore, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { SessionInfo } from '@office/shared';
 import { OfficeSession, api } from './session/session';
 import { mountOffice } from './game/mount';
 import { OwnerPanel, ProfileDialog } from './ui/Account';
 import './ui/styles.css';
+
+const MediaControls = lazy(() =>
+  import('./ui/Media').then((module) => ({ default: module.MediaControls })),
+);
 
 // Read personal link secrets once and remove them before any network activity.
 const loginToken = new URLSearchParams(location.hash.slice(1)).get('login');
@@ -112,6 +116,7 @@ function Office({ info }: { info: SessionInfo }) {
   const [panel, setPanel] = useState(true);
   const [profile, setProfile] = useState(false);
   const [error, setError] = useState('');
+  const [statusBusy, setStatusBusy] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     session.start();
@@ -127,6 +132,17 @@ function Office({ info }: { info: SessionInfo }) {
     zones.find((z) => z.properties.some((p) => p.name === 'zoneId' && p.value === id))?.name ??
     'Open floor';
   const online = new Set(view.players.map((p) => p.id));
+  async function setStatus(status: SessionInfo['user']['status']) {
+    setStatusBusy(true);
+    setError('');
+    try {
+      await api('/status', { status }, 'PATCH');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setStatusBusy(false);
+    }
+  }
   async function logout() {
     try {
       await api('/logout', {});
@@ -230,10 +246,7 @@ function Office({ info }: { info: SessionInfo }) {
           </div>
           <div className="panel-note">
             <strong>Room to settle in.</strong>
-            <p>
-              Walk over to a desk or explore a meeting room. Audio and video arrive in the next
-              phase.
-            </p>
+            <p>Walk into a desk or meeting room to join its private conversation.</p>
           </div>
           {view.user.role === 'owner' && <OwnerPanel view={view} />}
           <button className="text-button signout" onClick={logout}>
@@ -252,10 +265,29 @@ function Office({ info }: { info: SessionInfo }) {
             <span className="edit-glyph">✎</span>
           </button>
           <span className="control-divider" />
-          <span className="availability">
+          <label className="availability">
             <span className={`status-dot ${view.user.status}`} />
-            {view.user.status === 'free' ? 'Available' : view.user.status}
-          </span>
+            <select
+              aria-label="Availability"
+              disabled={statusBusy}
+              value={view.user.status}
+              onChange={(event) =>
+                void setStatus(event.target.value as SessionInfo['user']['status'])
+              }
+            >
+              <option value="free">Available</option>
+              <option value="focus">Focus</option>
+              <option value="do-not-disturb">Do not disturb</option>
+            </select>
+          </label>
+          <span className="control-divider" />
+          <Suspense fallback={<small>Media…</small>}>
+            <MediaControls
+              zoneId={self?.zoneId ?? null}
+              status={view.user.status}
+              connected={view.connection === 'online'}
+            />
+          </Suspense>
           <span className="control-divider" />
           <div className="movement-hint">
             <kbd>W</kbd>
