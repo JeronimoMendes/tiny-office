@@ -132,7 +132,15 @@ No third-party artwork is included. Generated artwork is CC0; see [assets/LICENS
 
 ## Develop
 
-Node 22.12+ and npm, plus PostgreSQL 16:
+The Compose override mounts `apps/` and `packages/` into the app container and replaces its command with the watch servers, so no host toolchain is needed:
+
+```sh
+docker compose -f compose.yaml -f compose.dev.yaml up
+```
+
+Open http://localhost:5173. Client edits hot-reload through Vite; server edits restart `tsx watch`. `node_modules` comes from the image, so rebuild (`--build`) after changing a `package.json`. Port 3000 keeps serving the image's production build and is stale in this mode.
+
+To run the servers on the host instead, with Node 22.12+ and npm:
 
 ```sh
 npm ci
@@ -143,7 +151,7 @@ DATABASE_URL=postgres://office:office@localhost:5432/office \
   LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret npm run dev
 ```
 
-Open http://localhost:5173. Stop any Compose app first (`docker compose stop app`); only one server can own a workspace. Media needs the `livekit` service running, and the credentials above must match the ones it started with. The optional Compose override exposes PostgreSQL on loopback for host-side development. `npm run build && npm start` serves the production build from port 3000.
+Stop the Compose app first (`docker compose stop app`); only one server can own a workspace. Media needs the `livekit` service running, and the credentials above must match the ones it started with. The override also exposes PostgreSQL on loopback for host-side tooling. `npm run build && npm start` serves the production build from port 3000.
 
 ### Code map
 

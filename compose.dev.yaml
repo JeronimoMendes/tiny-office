@@ -1,5 +1,26 @@
-# Optional host-side development/test access. Not used in the default deployment.
+# Development overlay: runs the app container from the mounted source tree with
+# hot reload, and exposes PostgreSQL on loopback for host-side tooling.
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up
+#
+# Vite serves the client on 5173 and proxies /api and /ws to the server on 3000,
+# so open http://localhost:5173. Port 3000 still serves the image's production
+# build, which is stale in this mode. Rebuild the image after dependency changes:
+# node_modules comes from the image, not the mount.
 services:
   db:
     ports:
       - '127.0.0.1:5432:5432'
+  app:
+    command: npm run dev
+    # Vite caches under the image's node_modules, which npm ci created as root.
+    user: root
+    environment:
+      NODE_ENV: development
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
+    ports:
+      - '${BIND_ADDRESS:-127.0.0.1}:5173:5173'
+    volumes:
+      - ./apps:/app/apps
+      - ./packages:/app/packages
+      - ./tsconfig.json:/app/tsconfig.json:ro
