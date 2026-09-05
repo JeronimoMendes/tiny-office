@@ -138,20 +138,20 @@ form .primary {
   right: 22px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 12px 17px;
-  border-radius: 13px;
-  height: 66px;
-  pointer-events: auto;
+  align-items: flex-start;
+  pointer-events: none;
 }
 .brand,
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 13px;
+  padding: 9px 15px;
+  border-radius: 13px;
+  pointer-events: auto;
 }
 .brand-mark {
-  font-size: 35px;
+  font-size: 28px;
   color: #c8d4b4;
   line-height: 1;
 }
@@ -169,7 +169,7 @@ form .primary {
   margin-top: 4px;
 }
 .topbar-right {
-  gap: 18px;
+  gap: 16px;
 }
 .connection {
   display: flex;
@@ -198,7 +198,7 @@ form .primary {
 .location-chip {
   position: absolute;
   left: 22px;
-  top: 100px;
+  top: 84px;
   padding: 10px 13px;
   border-radius: 9px;
   font-size: 12px;
@@ -221,7 +221,7 @@ form .primary {
 }
 .side-panel {
   position: absolute;
-  top: 100px;
+  top: 84px;
   right: 22px;
   bottom: 138px;
   width: 286px;
@@ -662,10 +662,10 @@ kbd {
   }
   .location-chip {
     left: 12px;
-    top: 90px;
+    top: 74px;
   }
   .side-panel {
-    top: 140px;
+    top: 74px;
   }
   .controls {
     gap: 12px;

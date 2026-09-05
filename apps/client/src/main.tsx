@@ -160,15 +160,15 @@ function Office({ info }: { info: SessionInfo }) {
         aria-label="Virtual office map. Use WASD or arrow keys to walk."
         tabIndex={0}
       />
-      <header className="topbar glass">
-        <div className="brand">
+      <header className="topbar">
+        <div className="brand glass">
           <span className="brand-mark">✳</span>
           <div>
             <strong>{view.workspace.name}</strong>
             <span>WORKSPACE</span>
           </div>
         </div>
-        <div className="topbar-right">
+        <div className="topbar-right glass">
           <span className={`connection ${view.connection}`} data-testid="connection">
             <i />
             {view.connection === 'online' ? `${view.players.length} here` : view.connection}
