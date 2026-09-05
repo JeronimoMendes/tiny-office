@@ -477,14 +477,34 @@ form .primary {
   gap: 8px;
   pointer-events: none;
 }
-.media-tracks video {
+.media-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
   width: 180px;
+}
+.media-tracks video {
+  width: 100%;
   aspect-ratio: 16 / 10;
   border-radius: 12px;
   object-fit: cover;
   background: #1c2821;
   border: 1px solid #d3ddbc33;
   box-shadow: 0 6px 28px #1b251e70;
+}
+.media-name {
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 7px;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: #eef3e4;
+  background: #1c2821cc;
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .media-tracks audio {
   display: none;

@@ -98,17 +98,29 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeEnabled();
   await expect(coworker.getByRole('button', { name: 'Video', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Video', exact: true }).click();
-  await expect(page.locator('video[data-local]')).toHaveCount(1);
-  await expect(coworker.locator(`video[data-participant="${owner.id}"]`)).toHaveCount(1, {
-    timeout: 10_000,
-  });
+  await expect(page.locator('.media-tile[data-local] video')).toHaveCount(1);
+  await expect(page.locator('.media-tile[data-local] .media-name')).toHaveText('Alice Oak (you)');
+  const ownerTile = coworker.locator(`.media-tile[data-participant="${owner.id}"]`);
+  await expect(ownerTile.locator('video')).toHaveCount(1, { timeout: 10_000 });
+  await expect(ownerTile.locator('.media-name')).toHaveText('Alice Oak');
+
+  // Stopping video unpublishes instead of muting, so the peer's tile goes away
+  // and restarting republishes into that same one rather than adding a second.
+  await page.getByRole('button', { name: 'Stop video', exact: true }).click();
+  await expect(page.locator('.media-tile[data-local]')).toHaveCount(0);
+  await expect(ownerTile).toHaveCount(0, { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(ownerTile).toHaveCount(1, { timeout: 10_000 });
+  await expect(ownerTile.locator('video')).toHaveCount(1);
 
   // Focus gets no incoming tracks or camera grant, but explicit microphone
   // publication remains available to free coworkers in the same zone.
   await coworker.getByLabel('Availability').selectOption('focus');
   await expect(coworker.getByText('Focused · incoming media off')).toBeVisible();
   await expect(coworker.getByRole('button', { name: 'Video', exact: true })).toBeDisabled();
-  await expect(coworker.locator(`video[data-participant="${owner.id}"]`)).toHaveCount(0);
+  await expect(coworker.locator(`.media-tile[data-participant="${owner.id}"] video`)).toHaveCount(
+    0,
+  );
   await coworker.getByRole('button', { name: 'Mic', exact: true }).click();
   await expect(page.locator(`audio[data-participant="${bob.id}"]`)).toHaveCount(1, {
     timeout: 10_000,
@@ -126,18 +138,21 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   // Returning free reconnects. Leaving the zone then revokes the conversation.
   await coworker.getByLabel('Availability').selectOption('free');
   await expect(coworker.getByRole('button', { name: 'Video', exact: true })).toBeEnabled();
-  await expect(coworker.locator(`video[data-participant="${owner.id}"]`)).toHaveCount(1, {
-    timeout: 10_000,
-  });
+  await expect(coworker.locator(`.media-tile[data-participant="${owner.id}"] video`)).toHaveCount(
+    1,
+    {
+      timeout: 10_000,
+    },
+  );
   await coworker.getByRole('button', { name: 'Video', exact: true }).click();
-  await expect(page.locator(`video[data-participant="${bob.id}"]`)).toHaveCount(1, {
+  await expect(page.locator(`.media-tile[data-participant="${bob.id}"] video`)).toHaveCount(1, {
     timeout: 10_000,
   });
   await coworker.keyboard.down('ArrowLeft');
   await expect.poll(() => coworkerPlayers.get(bob.id)?.zoneId).toBeNull();
   await coworker.keyboard.up('ArrowLeft');
   await expect(coworker.getByText('Open floor is quiet')).toBeVisible();
-  await expect(page.locator(`video[data-participant="${bob.id}"]`)).toHaveCount(0, {
+  await expect(page.locator(`.media-tile[data-participant="${bob.id}"] video`)).toHaveCount(0, {
     timeout: 10_000,
   });
 

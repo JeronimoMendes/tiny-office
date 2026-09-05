@@ -286,6 +286,7 @@ function Office({ info }: { info: SessionInfo }) {
               zoneId={self?.zoneId ?? null}
               status={view.user.status}
               connected={view.connection === 'online'}
+              displayName={view.user.displayName}
             />
           </Suspense>
           <span className="control-divider" />

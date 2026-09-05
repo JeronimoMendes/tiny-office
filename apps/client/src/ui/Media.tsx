@@ -5,12 +5,25 @@ import {
   Room,
   RoomEvent,
   Track,
+  type LocalTrack,
   type RemoteTrack,
   type RemoteTrackPublication,
   type RemoteParticipant,
 } from 'livekit-client';
 import type { Status } from '@office/shared';
 import { api } from '../session/session';
+
+/** Names every camera so a face in the strip maps to a person in the room. */
+function tile(video: HTMLMediaElement, name: string) {
+  if (video instanceof HTMLVideoElement) video.playsInline = true;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'media-tile';
+  const label = document.createElement('span');
+  label.className = 'media-name';
+  label.textContent = name;
+  wrapper.append(video, label);
+  return wrapper;
+}
 
 type TokenResponse =
   { enabled: false; reason: string } | { enabled: true; url: string; token: string; room: string };
@@ -19,10 +32,12 @@ export function MediaControls({
   zoneId,
   status,
   connected,
+  displayName,
 }: {
   zoneId: string | null;
   status: Status;
   connected: boolean;
+  displayName: string;
 }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [mic, setMic] = useState(false);
@@ -30,6 +45,7 @@ export function MediaControls({
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
   const media = useRef<HTMLDivElement>(null);
+  const published = useRef(new Map<Track.Source, LocalTrack>());
 
   useEffect(() => {
     let cancelled = false;
@@ -57,11 +73,14 @@ export function MediaControls({
       participant: RemoteParticipant,
     ) => {
       const element = track.attach();
-      element.dataset.participant = participant.identity;
-      element.dataset.track = publication.trackSid;
       element.autoplay = true;
-      if (element instanceof HTMLVideoElement) element.playsInline = true;
-      media.current?.append(element);
+      const node =
+        element instanceof HTMLVideoElement
+          ? tile(element, participant.name || participant.identity)
+          : element;
+      node.dataset.participant = participant.identity;
+      node.dataset.track = publication.trackSid;
+      media.current?.append(node);
     };
     const detach = (track: RemoteTrack, publication: RemoteTrackPublication) => {
       track.detach();
@@ -69,6 +88,9 @@ export function MediaControls({
     };
     next.on(RoomEvent.TrackSubscribed, attach);
     next.on(RoomEvent.TrackUnsubscribed, detach);
+    next.on(RoomEvent.TrackUnpublished, (publication: RemoteTrackPublication) =>
+      drop(`[data-track="${publication.trackSid}"]`),
+    );
     next.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) =>
       drop(`[data-participant="${participant.identity}"]`),
     );
@@ -97,21 +119,39 @@ export function MediaControls({
       .catch((error) => setMessage((error as Error).message));
     return () => {
       cancelled = true;
+      published.current.clear();
       next.removeAllListeners();
       void next.disconnect();
       if (media.current) media.current.replaceChildren();
     };
   }, [connected, zoneId, status, attempt]);
 
+  useEffect(() => {
+    const label = media.current?.querySelector('[data-local] .media-name');
+    if (label) label.textContent = `${displayName} (you)`;
+  }, [displayName]);
+
+  // Muting a published track leaves it subscribed, so peers keep a dead tile and
+  // the next publish adds a second one. Stopping means unpublishing.
+  async function unpublish(source: Track.Source) {
+    const track = published.current.get(source);
+    if (!track) return;
+    published.current.delete(source);
+    await room?.localParticipant.unpublishTrack(track, true);
+  }
+  async function publish(source: Track.Source, track: LocalTrack) {
+    await room!.localParticipant.publishTrack(track, { source });
+    published.current.set(source, track);
+  }
+
   async function toggleMic() {
     if (!room) return;
     try {
       if (mic) {
-        await room.localParticipant.setMicrophoneEnabled(false);
+        await unpublish(Track.Source.Microphone);
         setMic(false);
       } else {
-        const track = await createLocalAudioTrack();
-        await room.localParticipant.publishTrack(track, { source: Track.Source.Microphone });
+        await publish(Track.Source.Microphone, await createLocalAudioTrack());
         setMic(true);
       }
     } catch (error) {
@@ -122,17 +162,17 @@ export function MediaControls({
     if (!room || status !== 'free') return;
     try {
       if (camera) {
-        await room.localParticipant.setCameraEnabled(false);
+        await unpublish(Track.Source.Camera);
         media.current?.querySelectorAll('[data-local]').forEach((element) => element.remove());
         setCamera(false);
       } else {
         const track = await createLocalVideoTrack();
-        await room.localParticipant.publishTrack(track, { source: Track.Source.Camera });
+        await publish(Track.Source.Camera, track);
         const element = track.attach();
-        element.dataset.local = 'true';
         element.muted = true;
-        if (element instanceof HTMLVideoElement) element.playsInline = true;
-        media.current?.append(element);
+        const node = tile(element, `${displayName} (you)`);
+        node.dataset.local = 'true';
+        media.current?.append(node);
         setCamera(true);
       }
     } catch (error) {
