@@ -19,14 +19,10 @@ const MediaControls = lazy(() =>
   import('./ui/Media').then((module) => ({ default: module.MediaControls })),
 );
 const WhiteboardDialog = lazy(() =>
-  import('./ui/Whiteboard').then((module) => ({
-    default: module.WhiteboardDialog,
-  })),
+  import('./ui/Whiteboard').then((module) => ({ default: module.WhiteboardDialog })),
 );
 const WhiteboardPreview = lazy(() =>
-  import('./ui/Whiteboard').then((module) => ({
-    default: module.WhiteboardPreview,
-  })),
+  import('./ui/Whiteboard').then((module) => ({ default: module.WhiteboardPreview })),
 );
 
 // Read personal link secrets once and remove them before any network activity.
@@ -136,7 +132,10 @@ function Office({ info }: { info: SessionInfo }) {
   const [profile, setProfile] = useState(false);
   const [error, setError] = useState('');
   const [statusBusy, setStatusBusy] = useState(false);
+  const [deskPrompt, setDeskPrompt] = useState<string | null>(null);
+  const [deskBusy, setDeskBusy] = useState(false);
   const [whiteboardOpen, setWhiteboardOpen] = useState<string | null>(null);
+  const previousZone = useRef<string | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     session.start();
@@ -147,8 +146,13 @@ function Office({ info }: { info: SessionInfo }) {
     };
   }, [session]);
   const self = view.players.find((p) => p.id === view.user.id);
-  const whiteboardZones = useMemo(() => parseMap(view.workspace.map).zones, [view.workspace.map]);
-  const meetingZone = whiteboardZones.find(
+  const officeMap = useMemo(() => parseMap(view.workspace.map), [view.workspace.map]);
+  const deskZones = useMemo(
+    () => officeMap.zones.filter((zone) => zone.kind === 'desk'),
+    [officeMap],
+  );
+  const selfDesk = deskZones.find((zone) => view.workspace.desks[zone.id] === view.user.id);
+  const meetingZone = officeMap.zones.find(
     (zone) => zone.id === self?.zoneId && zone.kind === 'meeting',
   );
   const nearWhiteboard = Boolean(
@@ -157,11 +161,18 @@ function Office({ info }: { info: SessionInfo }) {
     Math.hypot(self.x - (meetingZone.x + meetingZone.width / 2), self.y - meetingZone.y) < 105,
   );
   const roomBoard = view.whiteboard?.zoneId === self?.zoneId ? view.whiteboard : null;
-  const zones = view.workspace.map.layers.find((l) => l.name === 'zones')?.objects ?? [];
   const zoneName = (id: string | null) =>
-    zones.find((z) => z.properties.some((p) => p.name === 'zoneId' && p.value === id))?.name ??
-    'Open floor';
+    officeMap.zones.find((zone) => zone.id === id)?.name ?? 'Open floor';
   const online = new Set(view.players.map((p) => p.id));
+  useEffect(() => {
+    const zoneId = self?.zoneId ?? null;
+    const available = deskZones.some(
+      (zone) => zone.id === zoneId && !view.workspace.desks[zone.id],
+    );
+    if (!available) setDeskPrompt(null);
+    else if (zoneId !== previousZone.current) setDeskPrompt(zoneId);
+    previousZone.current = zoneId;
+  }, [self?.zoneId, view.workspace.desks, deskZones]);
   useEffect(() => {
     if (whiteboardOpen && self?.zoneId !== whiteboardOpen) {
       session.closeWhiteboard(whiteboardOpen);
@@ -194,6 +205,20 @@ function Office({ info }: { info: SessionInfo }) {
   function closeWhiteboard() {
     if (whiteboardOpen) session.closeWhiteboard(whiteboardOpen);
     setWhiteboardOpen(null);
+  }
+  async function claimDesk() {
+    if (!deskPrompt) return;
+    setDeskBusy(true);
+    setError('');
+    try {
+      await api(`/desks/${deskPrompt}/claim`, {});
+      setDeskPrompt(null);
+    } catch (e) {
+      setError((e as Error).message);
+      setDeskPrompt(null);
+    } finally {
+      setDeskBusy(false);
+    }
   }
   async function setStatus(status: SessionInfo['user']['status']) {
     setStatusBusy(true);
@@ -249,6 +274,20 @@ function Office({ info }: { info: SessionInfo }) {
         <span>⌖</span> {zoneName(self?.zoneId ?? null)}{' '}
         <span className="quiet-tag">{self?.zoneId ? 'Zone' : 'Quiet space'}</span>
       </div>
+      {!selfDesk && (
+        <section className="todo-list glass" aria-labelledby="todo-title">
+          <span className="eyebrow" id="todo-title">
+            TO-DO · 1
+          </span>
+          <div>
+            <span aria-hidden="true">○</span>
+            <p>
+              <strong>Pick a desk</strong>
+              <small>Look for an available desk and walk into it.</small>
+            </p>
+          </div>
+        </section>
+      )}
       {view.connection !== 'online' && (
         <div className="connection-banner glass" role="status">
           {view.connectionMessage}
@@ -281,6 +320,24 @@ function Office({ info }: { info: SessionInfo }) {
             onOpen={() => openWhiteboard(roomBoard.zoneId)}
           />
         </Suspense>
+      )}
+      {deskPrompt && (
+        <section className="desk-prompt glass" role="dialog" aria-labelledby="desk-prompt-title">
+          <span className="desk-prompt-mark" aria-hidden="true">
+            ✦
+          </span>
+          <div>
+            <span className="eyebrow">AVAILABLE DESK</span>
+            <h2 id="desk-prompt-title">Make {zoneName(deskPrompt)} yours?</h2>
+            <p>You can settle in here now. Your manager can still move desks later.</p>
+            <div className="desk-prompt-actions">
+              <button onClick={() => setDeskPrompt(null)}>Not now</button>
+              <button className="primary" disabled={deskBusy} onClick={() => void claimDesk()}>
+                {deskBusy ? 'Claiming…' : 'Take this desk'}
+              </button>
+            </div>
+          </div>
+        </section>
       )}
       {panel && (
         <aside className="side-panel glass">

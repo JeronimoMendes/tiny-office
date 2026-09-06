@@ -142,6 +142,18 @@ export function httpRoutes(
     await refresh();
     return { ok: true };
   });
+  app.post('/api/desks/:zoneId/claim', async (req) => {
+    const session = await identity(req);
+    const { zoneId } = z.object({ zoneId: z.string() }).parse(req.params);
+    if (!world.map.zones.some((z) => z.id === zoneId && z.kind === 'desk'))
+      throw Object.assign(new Error('Unknown desk'), { statusCode: 400 });
+    if (world.connections.get(session.userId)?.player.zoneId !== zoneId)
+      throw Object.assign(new Error('Walk into this desk before claiming it'), { statusCode: 409 });
+    if (!(await store.claimDesk(world.workspace.id, zoneId, session.userId)))
+      throw Object.assign(new Error('Someone else just took this desk'), { statusCode: 409 });
+    await refresh();
+    return { ok: true };
+  });
   app.setErrorHandler((error, req, reply) => {
     if (error instanceof z.ZodError)
       return reply.code(400).send({

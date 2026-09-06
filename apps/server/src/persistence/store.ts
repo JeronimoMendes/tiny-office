@@ -235,6 +235,27 @@ export class Store {
         );
     });
   }
+  async claimDesk(workspaceId: string, zoneId: string, userId: string): Promise<boolean> {
+    return this.transaction(async (db) => {
+      // Claims and owner swaps share this lock, so two people can never take the
+      // same apparently available desk.
+      await db.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
+      const occupant = await db.query(
+        'SELECT user_id FROM desk_assignments WHERE workspace_id=$1 AND zone_id=$2',
+        [workspaceId, zoneId],
+      );
+      if (occupant.rows[0] && occupant.rows[0].user_id !== userId) return false;
+      await db.query('DELETE FROM desk_assignments WHERE workspace_id=$1 AND user_id=$2', [
+        workspaceId,
+        userId,
+      ]);
+      await db.query(
+        'INSERT INTO desk_assignments(workspace_id,zone_id,user_id) VALUES($1,$2,$3) ON CONFLICT (workspace_id,zone_id) DO UPDATE SET user_id=EXCLUDED.user_id',
+        [workspaceId, zoneId, userId],
+      );
+      return true;
+    });
+  }
   async savePositions(workspaceId: string, positions: SavedPosition[]) {
     if (!positions.length) return;
     await this.pool.query(

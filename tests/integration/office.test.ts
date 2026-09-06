@@ -133,6 +133,59 @@ it('atomically redeems personal links once and enforces owner/member permissions
   expect(await store.redeem(expired)).toBeNull();
 });
 
+it('lets members claim an available desk only while standing in it', async () => {
+  const token = await store.invite(id, 'member@example.test', 'Member', raw);
+  const session = await store.redeem(token);
+  const cookie = `office_session=${session}`;
+  const memberId = (await store.members(id)).find(
+    (member) => member.email === 'member@example.test',
+  )!.id;
+  office.world.updateMembers(await store.members(id), await store.desks(id));
+
+  expect(
+    (
+      await office.app.inject({
+        method: 'POST',
+        url: '/api/desks/desk-2/claim',
+        headers: headers(cookie),
+        payload: {},
+      })
+    ).statusCode,
+  ).toBe(409);
+
+  const connection = connect(cookie);
+  await until(() => office.world.connections.has(memberId), 'Member did not connect');
+  const desk = office.world.map.zones.find((zone) => zone.id === 'desk-2')!;
+  Object.assign(office.world.connections.get(memberId)!.player, {
+    x: desk.x + desk.width / 2,
+    y: desk.y + desk.height / 2,
+    zoneId: desk.id,
+  });
+  expect(
+    (
+      await office.app.inject({
+        method: 'POST',
+        url: '/api/desks/desk-2/claim',
+        headers: headers(cookie),
+        payload: {},
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect((await store.workspace(id)).desks['desk-2']).toBe(memberId);
+
+  await office.app.inject({
+    method: 'PUT',
+    url: '/api/desks/desk-3',
+    headers: headers(),
+    payload: { userId: memberId },
+  });
+  expect((await store.workspace(id)).desks).toMatchObject({ 'desk-3': memberId });
+  expect((await store.workspace(id)).desks['desk-2']).toBeUndefined();
+  await store.assignDesk(id, 'desk-3', null);
+  await office.world.flush();
+  connection.socket.close();
+});
+
 it('persists profile and desk assignments and denies unknown members/zones', async () => {
   await store.migrate(); // Applying the wardrobe migration twice is safe.
   expect(

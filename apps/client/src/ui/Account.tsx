@@ -100,7 +100,7 @@ export function OwnerPanel({ view }: { view: SessionView }) {
         </p>
       )}
       <h3>Desk assignments</h3>
-      <p>One desk per person. Anyone can walk into a desk zone.</p>
+      <p>People can pick an available desk themselves. As owner, you can swap or clear any desk.</p>
       {desks.map((desk) => (
         <label key={desk.id}>
           {desk.name}

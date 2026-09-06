@@ -18,7 +18,7 @@ Open **http://localhost:3000**. The app prints a **bootstrap secret** in its sta
 1. Open **Manage office** in the participants panel.
 2. Enter a coworker's email and name and create a sign-in link.
 3. Send that link privately to that person. It works **once** and expires after **24 hours**.
-4. Assign their desk with the desk dropdowns. Each person can own one desk; anyone may enter it.
+4. Members can claim an available desk by walking into its highlighted zone and accepting the prompt. Their “Pick a desk” to-do disappears once they have one. The owner can still swap or clear any assignment with the desk dropdowns; each person can own one desk and anyone may enter it.
 5. Use **WASD / arrow keys** to walk. Click your name in the bottom bar to edit your name and character. Mix head shapes, full-body skin tones, hairstyles, shirts, pants and shoes, with independent hair/clothing colors and a four-direction preview; save to update your character for everyone. Collapse the people panel for more map space.
 6. Walk to the whiteboard at the top of a meeting room and press **Space** to start a shared tldraw canvas. Everyone in that room sees a live preview and can click it to draw with you. The board lasts until its final editor closes it or leaves the room.
 
@@ -110,7 +110,7 @@ Supported, intentionally small Tiled subset:
 
 Desk and meeting rectangles cannot overlap. Optional open-floor rectangles may cover them; specific call zones win. Outside all rectangles is also open floor. Membership uses foot-center containment, including top/left edges and excluding bottom/right edges. Players do not collide with one another.
 
-The starter office has two meeting rooms and eight assignable desks. Expand it in Tiled to provide more personal desks; the simulation does not impose an eight-person limit.
+The starter office has two meeting rooms and eight assignable desks. Unassigned desks are highlighted and labeled available in the map. Expand it in Tiled to provide more personal desks; the simulation does not impose an eight-person limit.
 
 ### Import an edited map
 

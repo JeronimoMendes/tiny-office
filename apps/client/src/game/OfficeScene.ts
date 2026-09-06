@@ -9,6 +9,7 @@ import {
   type Direction,
   type Player,
   type TiledMap,
+  type Zone,
 } from '@office/shared';
 import type { RendererBridge, RenderSnapshot } from '../session/bridge';
 
@@ -68,6 +69,7 @@ export class OfficeScene extends Phaser.Scene {
   private snapshot: RenderSnapshot;
   private avatars = new Map<string, Avatar>();
   private zoneLabels = new Map<string, Phaser.GameObjects.Text>();
+  private zoneOutlines = new Map<string, Phaser.GameObjects.Graphics>();
   private unsubscribe?: () => void;
   private keys = new Map<string, Direction>();
   private lastTick = -1;
@@ -132,10 +134,9 @@ export class OfficeScene extends Phaser.Scene {
           ?.setScale(1 / scale)
           .setDepth(depth++);
     this.decorate(parsed.tiled);
-    const outlines = this.add.graphics().setDepth(DEPTH.zones);
     for (const zone of parsed.zones) {
-      outlines.lineStyle(1.5, zone.kind === 'meeting' ? 0xe4ecdb : 0xf0dcac, 0.32);
-      outlines.strokeRoundedRect(zone.x + 3, zone.y + 3, zone.width - 6, zone.height - 6, 8);
+      const outline = this.add.graphics().setDepth(DEPTH.zones);
+      this.zoneOutlines.set(zone.id, outline);
       const label = this.add
         .text(zone.x + zone.width / 2, zone.y + 8, zone.name, {
           fontFamily: 'system-ui, sans-serif',
@@ -148,6 +149,7 @@ export class OfficeScene extends Phaser.Scene {
         .setScale(1 / LABEL)
         .setDepth(DEPTH.labels);
       this.zoneLabels.set(zone.id, label);
+      this.drawZone(zone);
     }
     this.cameras.main.setBounds(0, 0, parsed.width, parsed.height).setZoom(2);
     this.cameras.main.setBackgroundColor('#3f4a40');
@@ -165,7 +167,33 @@ export class OfficeScene extends Phaser.Scene {
       document.removeEventListener('visibilitychange', this.clearKeys);
       this.avatars.clear();
       this.zoneLabels.clear();
+      this.zoneOutlines.clear();
     });
+  }
+  private drawZone(zone: Zone) {
+    const outline = this.zoneOutlines.get(zone.id);
+    const label = this.zoneLabels.get(zone.id);
+    if (!outline || !label) return;
+    const owner = this.snapshot.members.find(
+      (member) => member.id === this.snapshot.workspace.desks[zone.id],
+    );
+    const available = zone.kind === 'desk' && !owner;
+    outline.clear();
+    if (available) {
+      outline.fillStyle(0xd8cb94, 0.1);
+      outline.fillRoundedRect(zone.x + 3, zone.y + 3, zone.width - 6, zone.height - 6, 8);
+      outline.fillStyle(0xeadb9e, 0.9);
+      outline.fillCircle(zone.x + zone.width - 10, zone.y + 10, 3);
+    }
+    outline.lineStyle(
+      available ? 2 : 1.5,
+      available ? 0xeadb9e : zone.kind === 'meeting' ? 0xe4ecdb : 0xf0dcac,
+      available ? 0.85 : 0.32,
+    );
+    outline.strokeRoundedRect(zone.x + 3, zone.y + 3, zone.width - 6, zone.height - 6, 8);
+    label.setText(
+      owner ? `${owner.displayName}'s desk` : available ? `✦ Available · ${zone.name}` : zone.name,
+    );
   }
   // Desk props live in the map as points, so a workspace can be dressed — and
   // later personalised — without redrawing a tile.
@@ -321,10 +349,7 @@ export class OfficeScene extends Phaser.Scene {
       avatar.indicator.setFillStyle(statusColors[player.status]);
     }
     this.lastTick = snapshot.tick;
-    for (const zone of this.zones) {
-      const owner = snapshot.members.find((m) => m.id === snapshot.workspace.desks[zone.id]);
-      this.zoneLabels.get(zone.id)?.setText(owner ? `${owner.displayName}'s desk` : zone.name);
-    }
+    for (const zone of this.zones) this.drawZone(zone);
   }
   update() {
     const now = performance.now();
