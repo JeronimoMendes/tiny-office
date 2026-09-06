@@ -10,8 +10,12 @@ export function mountOffice(parent: HTMLElement, bridge: RendererBridge): () => 
       type: Phaser.AUTO,
       parent,
       backgroundColor: '#3f4a40',
-      pixelArt: true,
-      roundPixels: true,
+      // pixelArt also forces integer positions in Phaser. Keep nearest-neighbor
+      // artwork filtering, but allow subpixel avatar and camera movement.
+      pixelArt: false,
+      antialias: false,
+      antialiasGL: false,
+      roundPixels: false,
       scale: { mode: Phaser.Scale.RESIZE, width: parent.clientWidth, height: parent.clientHeight },
       scene: new OfficeScene(bridge, snapshot),
       audio: { noAudio: true },

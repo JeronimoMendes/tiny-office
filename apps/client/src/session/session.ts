@@ -10,6 +10,7 @@ import {
   type SessionInfo,
 } from '@office/shared';
 import type { RendererBridge, RenderSnapshot } from './bridge';
+import { LocalMotion } from './local-motion';
 
 export type SessionView = SessionInfo & {
   connection: 'connecting' | 'online' | 'reconnecting' | 'closed';
@@ -31,6 +32,7 @@ export class OfficeSession {
   private pending: Input[] = [];
   private heading: Heading | null = null;
   private predicted: Player | null = null;
+  private localMotion: LocalMotion | null = null;
   private tick = 0;
   private receivedAt = 0;
   private map;
@@ -43,8 +45,10 @@ export class OfficeSession {
       };
     },
     setHeading: (heading) => {
-      this.heading = heading;
+      this.heading = document.hidden ? null : heading;
+      this.localMotion?.setHeading(this.heading, performance.now());
     },
+    sampleSelf: (now) => this.localMotion?.sample(now) ?? null,
   };
   constructor(info: SessionInfo) {
     this.view = {
@@ -74,9 +78,11 @@ export class OfficeSession {
     document.addEventListener('visibilitychange', this.clearInput);
   }
   private clearInput = () => {
-    this.heading = null;
+    this.renderer.setHeading(null);
   };
   stop() {
+    this.clearInput();
+    this.localMotion = null;
     this.stopped = true;
     if (this.interval) clearInterval(this.interval);
     if (this.reconnect) clearTimeout(this.reconnect);
@@ -102,6 +108,8 @@ export class OfficeSession {
       if (this.stopped || socket !== this.socket) return;
       this.pending = [];
       this.predicted = null;
+      this.localMotion = null;
+      this.lastRender = null;
       this.heading = null;
       if ([4001, 4002, 4003].includes(event.code)) {
         this.update({
@@ -130,6 +138,8 @@ export class OfficeSession {
       this.tick = message.tick;
       this.receivedAt = performance.now();
       this.predicted = { ...message.players.find((p) => p.id === message.selfId)! };
+      this.heading = null;
+      this.localMotion = new LocalMotion(this.map, this.predicted, this.receivedAt);
       this.update({
         workspace: message.workspace,
         players: message.players,
@@ -163,9 +173,11 @@ export class OfficeSession {
     const self = players.get(this.view.user.id);
     this.pending = this.pending.filter((input) => input.seq > message.ack);
     if (self) {
+      const previous = this.predicted;
       this.predicted = { ...self };
       for (const input of this.pending)
         this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.heading) };
+      if (previous) this.localMotion?.reconcile(previous, this.predicted, this.receivedAt);
     }
     this.update({ players: [...players.values()] });
     this.publishRender();
@@ -186,7 +198,7 @@ export class OfficeSession {
     this.pending.push(input);
     this.socket.send(JSON.stringify(input));
     this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.heading) };
-    this.publishRender();
+    this.localMotion?.commit(this.predicted, performance.now());
   }
   private publishRender() {
     if (!this.predicted) return;

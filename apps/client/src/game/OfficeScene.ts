@@ -59,6 +59,7 @@ type Avatar = {
   indicator: Phaser.GameObjects.Arc;
   samples: Sample[];
   target: Player;
+  stride: number;
 };
 const directions: Direction[] = ['down', 'left', 'right', 'up'];
 const statusColors = { free: 0x9ebc8d, focus: 0xe2bd71, 'do-not-disturb': 0xce8174 };
@@ -299,10 +300,13 @@ export class OfficeScene extends Phaser.Scene {
           indicator: this.add.circle(player.x, player.y - 38, 3, statusColors[player.status]),
           samples: [],
           target: player,
+          stride: 0,
         };
         this.avatars.set(player.id, avatar);
         if (player.id === snapshot.selfId)
-          this.cameras.main.startFollow(avatar.sprite, true, 0.15, 0.15);
+          // The avatar is already smooth. A rounded/eased follow adds judder
+          // and a second layer of input lag, especially on high-refresh screens.
+          this.cameras.main.startFollow(avatar.sprite, false, 1, 1);
       }
       avatar.rows = appearanceFrames(player.appearance ?? presetAppearance(player.character)).map(
         ({ row }) => row,
@@ -321,17 +325,20 @@ export class OfficeScene extends Phaser.Scene {
       this.zoneLabels.get(zone.id)?.setText(owner ? `${owner.displayName}'s desk` : zone.name);
     }
   }
-  update(_time: number, delta: number) {
+  update() {
+    const now = performance.now();
     // Packet jitter may pause interpolation, but must never rewind it.
     const renderTime = (this.renderTime = Math.max(
       this.renderTime,
-      this.snapshot.tick * STEP_MS +
-        Math.min(performance.now() - this.snapshot.receivedAt, 150) -
-        100,
+      this.snapshot.tick * STEP_MS + Math.min(now - this.snapshot.receivedAt, 150) - 100,
     ));
     for (const [id, avatar] of this.avatars) {
-      let { x, y } = avatar.target;
-      if (id !== this.snapshot.selfId && avatar.samples.length) {
+      let { x, y, direction, moving } = avatar.target;
+      if (id === this.snapshot.selfId) {
+        const motion = this.bridge.sampleSelf(now);
+        if (motion) ({ x, y, direction, moving } = motion);
+        else moving = false;
+      } else if (avatar.samples.length) {
         const samples = avatar.samples;
         while (samples.length > 2 && samples[1].time <= renderTime) samples.shift();
         const a = samples[0],
@@ -339,21 +346,19 @@ export class OfficeScene extends Phaser.Scene {
         const t = a === b ? 1 : Phaser.Math.Clamp((renderTime - a.time) / (b.time - a.time), 0, 1);
         x = Phaser.Math.Linear(a.player.x, b.player.x, t);
         y = Phaser.Math.Linear(a.player.y, b.player.y, t);
-      } else {
-        const t = 1 - Math.exp(-delta / 28);
-        x = Phaser.Math.Linear(avatar.sprite.x, x, t);
-        y = Phaser.Math.Linear(avatar.sprite.y - 4, y, t);
-        if (Phaser.Math.Distance.Between(x, y, avatar.target.x, avatar.target.y) > 160) {
-          x = avatar.target.x;
-          y = avatar.target.y;
-        }
+        direction = t > 0 ? b.player.direction : a.player.direction;
+        moving = Math.hypot(x - avatar.sprite.x, y - (avatar.sprite.y - 4)) > 0.001;
       }
+      // Alternate feet through the neutral pose, in phase with distance rather
+      // than the global clock. Idle/wall contact must not keep cycling legs.
+      const distance = Math.hypot(x - avatar.sprite.x, y - (avatar.sprite.y - 4));
+      avatar.stride = moving ? (avatar.stride + Math.min(distance, 8)) % 60 : 0;
+      const gait = moving ? [1, 0, 1, 2][Math.floor(avatar.stride / 15)] : 1;
       avatar.sprite.setPosition(x, y + 4).setDepth(10 + y);
       avatar.shadow.setPosition(x, y).setDepth(9 + y);
       avatar.label.setPosition(x, y - 30).setDepth(10000);
       avatar.indicator.setPosition(x - avatar.label.displayWidth / 2 - 4, y - 38).setDepth(10001);
-      const gait = avatar.target.moving ? Math.floor(_time / 125) % 3 : 1;
-      const frame = directions.indexOf(avatar.target.direction) * 3 + gait;
+      const frame = directions.indexOf(direction) * 3 + gait;
       avatar.layers.forEach((layer, index) => layer.setFrame(avatar.rows[index] * 12 + frame));
     }
   }

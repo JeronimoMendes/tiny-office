@@ -47,14 +47,22 @@ function facing(previous: Direction, dx: number, dy: number): Direction {
   return dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down';
 }
 
-export function move(map: OfficeMap, state: Motion, to: Heading | null): Motion {
+// The server always uses the default fixed step. The local presentation can
+// integrate a fraction of it without duplicating collision or diagonal rules.
+export function move(
+  map: OfficeMap,
+  state: Motion,
+  to: Heading | null,
+  elapsedMs = STEP_MS,
+): Motion {
   if (!to) return { ...state, moving: false };
   const [ux, uy] = headings[to];
   const direction = facing(state.direction, ux, uy);
   let { x, y } = state;
   // Small fixed substeps prevent tunneling and allow approaching a wall closely.
-  const steps = Math.ceil(SPEED / TICK_HZ / 2),
-    length = SPEED / TICK_HZ / steps / (ux && uy ? Math.SQRT2 : 1),
+  const distance = (SPEED / TICK_HZ) * (Math.max(0, Math.min(elapsedMs, STEP_MS)) / STEP_MS);
+  const steps = Math.max(1, Math.ceil(distance / 2)),
+    length = distance / steps / (ux && uy ? Math.SQRT2 : 1),
     dx = ux * length,
     dy = uy * length;
   for (let i = 0; i < steps; i++) {

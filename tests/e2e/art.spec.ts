@@ -15,6 +15,28 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
   test(`pixel office ${variant} loads, walks and previews every character`, async ({
     page,
   }, testInfo) => {
+    // Capture Phaser only inside the browser fixture; production exposes no
+    // testing API. Measure actual displayed positions, not server coordinates.
+    if (variant === 'cozy') {
+      await page.addInitScript(() => {
+        const browser = window as typeof window & { officeTestGame?: import('phaser').Game };
+        let phaser: typeof import('phaser');
+        Object.defineProperty(window, 'Phaser', {
+          configurable: true,
+          get: () => phaser,
+          set: (value: typeof import('phaser')) => {
+            phaser = value;
+            const Game = value.Game;
+            value.Game = class extends Game {
+              constructor(config: Phaser.Types.Core.GameConfig) {
+                super(config);
+                browser.officeTestGame = this;
+              }
+            };
+          },
+        });
+      });
+    }
     const map = parseMap(
       JSON.parse(
         await readFile(
@@ -122,7 +144,77 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
     const start = players[0].x;
     await page.keyboard.down('ArrowRight');
     await expect.poll(() => players[0].x).toBeGreaterThan(start + 16);
+    if (variant === 'cozy') {
+      const trace = await page.evaluate(async () => {
+        const game = (window as typeof window & { officeTestGame: import('phaser').Game })
+          .officeTestGame;
+        const scene = game.scene.getScene('office');
+        const avatar = scene.children.list.find(
+          (child) => child.type === 'Container',
+        ) as Phaser.GameObjects.Container;
+        const samples: { time: number; x: number }[] = [];
+        await new Promise<void>((resolve) => {
+          const record = () => {
+            samples.push({ time: performance.now(), x: avatar.x });
+            if (samples.length === 40) {
+              game.events.off('poststep', record);
+              resolve();
+            }
+          };
+          game.events.on('poststep', record);
+        });
+        return {
+          samples,
+          roundPixels: game.config.roundPixels,
+          cameraRoundPixels: scene.cameras.main.roundPixels,
+        };
+      });
+      const speeds = trace.samples
+        .slice(1)
+        .flatMap((sample, i) => {
+          const elapsed = sample.time - trace.samples[i].time;
+          // Ignore scheduling stalls: this checks cadence, not the CI GPU's FPS.
+          return elapsed >= 5 && elapsed <= 40
+            ? [(1000 * (sample.x - trace.samples[i].x)) / elapsed]
+            : [];
+        })
+        .sort((a, b) => a - b);
+      expect(speeds.length).toBeGreaterThan(15);
+      expect(speeds[Math.floor(speeds.length / 2)]).toBeGreaterThan(100);
+      expect(speeds[Math.floor(speeds.length / 2)]).toBeLessThan(140);
+      // Compare the central distribution: occasional timer starvation in a
+      // headless browser may hit the deliberate speculation limit. Old easing
+      // varied from near-zero to >200px/s throughout every network tick.
+      expect(
+        speeds[Math.floor(speeds.length * 0.8)] / speeds[Math.floor(speeds.length * 0.2)],
+      ).toBeLessThan(1.7);
+      expect(trace.roundPixels).toBe(false);
+      expect(trace.cameraRoundPixels).toBe(false);
+    }
     await page.keyboard.up('ArrowRight');
+    if (variant === 'cozy') {
+      const stoppedPositions = await page.evaluate(async () => {
+        const game = (window as typeof window & { officeTestGame: import('phaser').Game })
+          .officeTestGame;
+        const avatar = game.scene
+          .getScene('office')
+          .children.list.find(
+            (child) => child.type === 'Container',
+          ) as Phaser.GameObjects.Container;
+        return new Promise<number[]>((resolve) => {
+          const positions: number[] = [];
+          const record = () => {
+            positions.push(avatar.x);
+            if (positions.length === 20) {
+              game.events.off('poststep', record);
+              resolve(positions);
+            }
+          };
+          game.events.on('poststep', record);
+        });
+      });
+      expect(Math.max(...stoppedPositions) - Math.min(...stoppedPositions)).toBeLessThan(0.001);
+    }
     await expect.poll(() => players[0].moving).toBe(false);
     await page.getByRole('button', { name: /Robin Edit your character/ }).click();
     await page.getByText('Start with an outfit').click();
