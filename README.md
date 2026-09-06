@@ -66,6 +66,27 @@ Browsers only grant microphone and camera access on a secure origin, so any depl
 - Media itself is UDP. Publish `7882/udp` (and `7881/tcp` as a fallback) to the internet, set `LIVEKIT_BIND_ADDRESS=0.0.0.0`, set `LIVEKIT_NODE_IP` to the public address, or drop `--node-ip` from `compose.yaml` and set `use_external_ip: true` in [deploy/livekit.yaml](deploy/livekit.yaml).
 - Clients behind firewalls that block outbound UDP need TURN. Uncomment the `turn` block in `deploy/livekit.yaml`, point it at a certificate for your domain, and publish `5349/tcp` (443 is the port most likely to be allowed) plus `3478/udp`.
 
+### Deploying on Coolify
+
+[compose.coolify.yaml](compose.coolify.yaml) is the same three services wired for Coolify's proxy: no host port for the app, LiveKit signaling proxied instead of published, and RTC ports on the host. Maps and assets come from the image, so a map change is a redeploy.
+
+1. **New resource → Docker Compose**, pointing at this repository (branch `main`). Set the compose path to `compose.coolify.yaml`.
+2. Set the environment variables Coolify lists from the file. `POSTGRES_PASSWORD` needs URL-safe characters (it is interpolated into `DATABASE_URL`), and `LIVEKIT_API_SECRET` needs 32+ characters:
+
+   ```
+   APP_ORIGIN=https://office.example.com
+   LIVEKIT_WS_URL=wss://livekit.example.com
+   POSTGRES_PASSWORD=<generated, URL-safe>
+   LIVEKIT_API_KEY=<generated>
+   LIVEKIT_API_SECRET=<generated, 32+ chars>
+   ```
+
+3. Give both services a domain: `https://office.example.com` on `app` (port 3000) and `https://livekit.example.com` on `livekit` (port 7880). They must match `APP_ORIGIN` and `LIVEKIT_WS_URL` exactly, host for host. Coolify issues the certificates and its proxy passes WebSocket upgrades through, so `/ws` and LiveKit signaling need no extra configuration.
+4. Open `7881/tcp` and `7882/udp` on the server firewall and any cloud security group. The proxy does not carry media; LiveKit publishes these itself and discovers the public address through `use_external_ip` in [deploy/livekit.coolify.yaml](deploy/livekit.coolify.yaml).
+5. Deploy, then read the app logs for the bootstrap secret and claim ownership at `APP_ORIGIN`. Leave `BOOTSTRAP_SECRET` unset to get a fresh one per unclaimed boot.
+
+Coolify's terminal on the `app` service runs the operator commands: `npm run auth:owner-link` for owner recovery, `npm run map:import -- maps/office.tmj` after a map change. The `office-data` volume survives redeploys; deleting the resource with volumes deletes the office and accounts.
+
 On Linux hosts, raise the UDP buffers LiveKit asks for at startup (`net.core.rmem_max`/`wmem_max` of about 5 MB); the default is too small for several concurrent calls.
 
 Verify each path from a network you do not control: a call between two networks confirms UDP, and LiveKit's [connection tester](https://livekit.io/connection-test) reports whether it fell back to TURN. Do not expose PostgreSQL.

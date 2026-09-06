@@ -1,0 +1,73 @@
+# Coolify deployment. Add this repository as a "Docker Compose" resource and set
+# this file as the compose path. Coolify's proxy terminates TLS and routes the
+# domains you set on the app and livekit services; media UDP bypasses the proxy.
+# See README "Deploying on Coolify".
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: office
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: office
+    volumes:
+      - office-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U office -d office']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  livekit:
+    image: livekit/livekit-server:v1.9.10
+    restart: unless-stopped
+    # No --node-ip: livekit.coolify.yaml discovers the public address instead.
+    command: --config /etc/livekit/livekit.yaml --bind 0.0.0.0
+    environment:
+      LIVEKIT_KEYS: '${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}'
+    volumes:
+      - ./deploy/livekit.coolify.yaml:/etc/livekit/livekit.yaml:ro
+    # Signaling reaches 7880 through the proxy; RTC needs the host directly.
+    expose:
+      - '7880'
+    ports:
+      - '7881:7881'
+      - '7882:7882/udp'
+
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      DATABASE_URL: postgres://office:${POSTGRES_PASSWORD}@db:5432/office
+      APP_ORIGIN: ${APP_ORIGIN}
+      BOOTSTRAP_SECRET: ${BOOTSTRAP_SECRET:-}
+      WORKSPACE_ID: ${WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}
+      MAP_FILE: ${MAP_FILE:-maps/office.tmj}
+      LIVEKIT_URL: http://livekit:7880
+      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+    expose:
+      - '3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    stop_grace_period: 15s
+
+volumes:
+  office-data:

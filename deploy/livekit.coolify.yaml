@@ -1,0 +1,21 @@
+# Self-hosted SFU for one workspace, behind Coolify's proxy.
+# Credentials come from LIVEKIT_KEYS; signaling is proxied to 7880 as wss://.
+port: 7880
+logging:
+  level: info
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  # Published straight on the host, so LiveKit must advertise the server's own
+  # public address rather than the container IP.
+  use_external_ip: true
+# Clients whose firewall blocks outbound UDP fall back to 7881/tcp. If that is
+# not enough, enable TURN/TLS here with a certificate for the LiveKit domain and
+# publish 5349/tcp plus 3478/udp; see README.
+# turn:
+#   enabled: true
+#   domain: livekit.example.com
+#   cert_file: /etc/livekit/tls/fullchain.pem
+#   key_file: /etc/livekit/tls/privkey.pem
+#   tls_port: 5349
+#   udp_port: 3478
