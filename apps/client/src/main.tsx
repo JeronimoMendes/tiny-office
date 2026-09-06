@@ -228,7 +228,7 @@ function Office({ info }: { info: SessionInfo }) {
                     key={member.id}
                     data-testid={`person-${member.id}`}
                   >
-                    <Avatar character={member.character} />
+                    <Avatar character={member.character} appearance={member.appearance} />
                     <div className="person-details">
                       <strong>
                         {member.displayName}
@@ -258,7 +258,7 @@ function Office({ info }: { info: SessionInfo }) {
       <footer className="bottom-wrap">
         <div className="controls glass">
           <button className="identity-button" onClick={() => setProfile(true)}>
-            <Avatar character={view.user.character} />
+            <Avatar character={view.user.character} appearance={view.user.appearance} />
             <span>
               <strong>{view.user.displayName}</strong>
               <small>Edit your character</small>

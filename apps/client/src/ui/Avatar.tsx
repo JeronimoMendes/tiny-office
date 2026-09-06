@@ -1,21 +1,36 @@
-// One idle frame lifted out of the walk sheet. The artwork is four times the
-// world grid, so the sheet is scaled down rather than magnified.
-const FRAME = { width: 24, height: 32 };
-const SHEET = { columns: 12, rows: 8, idle: 1 };
+import {
+  appearanceFrames,
+  presetAppearance,
+  type Appearance,
+  type Direction,
+} from '@office/shared';
+const directions: Direction[] = ['down', 'left', 'right', 'up'];
 
-export function Avatar({ character, scale = 1 }: { character: number; scale?: number }) {
-  const width = FRAME.width * scale,
-    height = FRAME.height * scale;
+export function Avatar({
+  character = 0,
+  appearance,
+  scale = 1,
+  direction = 'down',
+}: {
+  character?: number;
+  appearance?: Appearance | null;
+  scale?: number;
+  direction?: Direction;
+}) {
+  const width = 24 * scale,
+    height = 32 * scale;
   return (
-    <span
-      className="avatar-chip"
-      style={{
-        width,
-        height,
-        backgroundSize: `${width * SHEET.columns}px ${height * SHEET.rows}px`,
-        backgroundPosition: `-${width * SHEET.idle}px -${character * height}px`,
-      }}
-      aria-hidden="true"
-    />
+    <span className="avatar-chip" style={{ width, height }} aria-hidden="true">
+      {appearanceFrames(appearance ?? presetAppearance(character)).map(({ name, row, rows }) => (
+        <span
+          key={name}
+          style={{
+            backgroundImage: `url('/assets/wardrobe/${name}.png')`,
+            backgroundSize: `${width * 12}px ${height * rows}px`,
+            backgroundPosition: `-${width * (directions.indexOf(direction) * 3 + 1)}px -${row * height}px`,
+          }}
+        />
+      ))}
+    </span>
   );
 }

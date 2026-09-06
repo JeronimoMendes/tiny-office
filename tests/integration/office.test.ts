@@ -13,7 +13,7 @@ import {
   type ParticipantPermission,
   type Room as LiveKitRoom,
 } from 'livekit-server-sdk';
-import type { ServerMessage, Status } from '@office/shared';
+import { presetAppearance, type ServerMessage, type Status } from '@office/shared';
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url)
@@ -134,6 +134,7 @@ it('atomically redeems personal links once and enforces owner/member permissions
 });
 
 it('persists profile and desk assignments and denies unknown members/zones', async () => {
+  await store.migrate(); // Applying the wardrobe migration twice is safe.
   expect(
     (
       await office.app.inject({
@@ -556,4 +557,50 @@ it('scopes media credentials to the authoritative zone and revokes them from the
     for (const socket of sockets) socket.close();
     await media.app.close();
   }
+});
+
+it('persists a mixed wardrobe and broadcasts it to connected players, rejecting invalid selections', async () => {
+  const peer = connect(ownerCookie);
+  await peer.next((m) => m.type === 'welcome');
+  const appearance = {
+    ...presetAppearance(3),
+    head: 2,
+    skin: 5,
+    hair: 8,
+    shirt: 1,
+    pants: 3,
+    shoes: 3,
+  };
+  const payload = { displayName: 'Alice', character: 3, appearance };
+  expect(
+    (await office.app.inject({ method: 'PATCH', url: '/api/profile', headers: headers(), payload }))
+      .statusCode,
+  ).toBe(200);
+  const update = await peer.next(
+    (m) =>
+      m.type === 'delta' &&
+      m.changedPlayers.some((p) => p.id === ownerId && p.appearance?.head === 2),
+  );
+  expect(
+    update.type === 'delta' && update.changedPlayers.find((p) => p.id === ownerId)?.appearance,
+  ).toEqual(appearance);
+  expect((await store.members(id)).find((m) => m.id === ownerId)?.appearance).toEqual(appearance);
+  const restored = new World(await store.workspace(id), await store.members(id), store);
+  expect(restored.members.get(ownerId)?.appearance).toEqual(appearance);
+  const session = await office.app.inject({ url: '/api/session', headers: headers() });
+  expect(session.json().user.appearance).toEqual(appearance);
+  for (const invalid of [{ ...appearance, skin: 6 }, { ...appearance, head: -1 }, { head: 0 }]) {
+    expect(
+      (
+        await office.app.inject({
+          method: 'PATCH',
+          url: '/api/profile',
+          headers: headers(),
+          payload: { ...payload, appearance: invalid },
+        })
+      ).statusCode,
+    ).toBe(400);
+  }
+  expect((await store.members(id)).find((m) => m.id === ownerId)?.appearance).toEqual(appearance);
+  peer.socket.close();
 });

@@ -71,6 +71,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await page.getByText('Manage office').click();
   await page.getByRole('button', { name: /Alice Edit your character/ }).click();
   await page.getByLabel('Display name').fill('Alice Oak');
+  await page.getByText('Start with an outfit').click();
   await page.getByRole('button', { name: 'Character 4', exact: true }).click();
   await page.getByRole('button', { name: 'Save profile' }).click();
   await expect(coworker.getByTestId(`person-${owner.id}`)).toContainText('Alice Oak');

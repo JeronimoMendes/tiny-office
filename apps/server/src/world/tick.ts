@@ -68,6 +68,7 @@ export class World {
           id: member.id,
           displayName: member.displayName,
           character: member.character,
+          appearance: member.appearance,
           status: member.status,
           x: member.x,
           y: member.y,
@@ -134,6 +135,7 @@ export class World {
         Object.assign(c.player, {
           displayName: member.displayName,
           character: member.character,
+          appearance: member.appearance,
           status: member.status,
         });
         this.changed.add(member.id);

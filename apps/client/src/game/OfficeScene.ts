@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import {
   heading,
+  appearanceFrames,
+  appearanceLayers,
+  presetAppearance,
   parseMap,
   STEP_MS,
   type Direction,
@@ -12,8 +15,6 @@ import type { RendererBridge, RenderSnapshot } from '../session/bridge';
 // Bundled artwork uses 4x sheets with hard 4px blocks: each block is one world
 // pixel. Custom tilesets can provide a matching @4x sibling or a native PNG.
 const ART = 4;
-// Character frames share the world pixel scale and their bottom-center anchor.
-const AVATAR = 1 / ART;
 // Labels are built oversized and scaled down so they stay sharp under camera zoom.
 const LABEL = 3;
 const DEPTH = { props: 5, zones: 6, labels: 7 };
@@ -50,7 +51,9 @@ function artResolution(map: TiledMap, scale: number) {
 
 type Sample = { time: number; player: Player };
 type Avatar = {
-  sprite: Phaser.GameObjects.Sprite;
+  sprite: Phaser.GameObjects.Container;
+  layers: Phaser.GameObjects.Sprite[];
+  rows: number[];
   label: Phaser.GameObjects.Text;
   shadow: Phaser.GameObjects.Ellipse;
   indicator: Phaser.GameObjects.Arc;
@@ -99,7 +102,11 @@ export class OfficeScene extends Phaser.Scene {
       fallback = true;
       this.load.image('office-tiles', tileset);
     });
-    this.load.spritesheet('avatars', '/assets/avatars.png', { frameWidth: 96, frameHeight: 128 });
+    for (const { name } of appearanceLayers)
+      this.load.spritesheet(`wardrobe-${name}`, `/assets/wardrobe/${name}.png`, {
+        frameWidth: 24,
+        frameHeight: 32,
+      });
     this.load.spritesheet('props', '/assets/props.png', { frameWidth: 128, frameHeight: 128 });
     this.load.json('props-manifest', '/assets/props.json');
   }
@@ -141,18 +148,6 @@ export class OfficeScene extends Phaser.Scene {
         .setDepth(DEPTH.labels);
       this.zoneLabels.set(zone.id, label);
     }
-    for (let character = 0; character < 8; character++)
-      for (const [d, direction] of directions.entries()) {
-        this.anims.create({
-          key: `${character}-${direction}`,
-          frames: this.anims.generateFrameNumbers('avatars', {
-            start: character * 12 + d * 3,
-            end: character * 12 + d * 3 + 2,
-          }),
-          frameRate: 8,
-          repeat: -1,
-        });
-      }
     this.cameras.main.setBounds(0, 0, parsed.width, parsed.height).setZoom(2);
     this.cameras.main.setBackgroundColor('#3f4a40');
     this.unsubscribe = this.bridge.subscribe((snapshot) => this.receive(snapshot));
@@ -283,11 +278,13 @@ export class OfficeScene extends Phaser.Scene {
       const player = authoritative.id === snapshot.selfId ? snapshot.predictedSelf : authoritative;
       let avatar = this.avatars.get(player.id);
       if (!avatar) {
+        const layers = appearanceLayers.map(({ name }) =>
+          this.add.sprite(0, 0, `wardrobe-${name}`).setOrigin(0.5, 1),
+        );
         avatar = {
-          sprite: this.add
-            .sprite(player.x, player.y + 4, 'avatars')
-            .setOrigin(0.5, 1)
-            .setScale(AVATAR),
+          sprite: this.add.container(player.x, player.y + 4, layers),
+          layers,
+          rows: [],
           label: this.add
             .text(player.x, player.y - 34, player.displayName, {
               fontFamily: 'system-ui, sans-serif',
@@ -307,6 +304,9 @@ export class OfficeScene extends Phaser.Scene {
         if (player.id === snapshot.selfId)
           this.cameras.main.startFollow(avatar.sprite, true, 0.15, 0.15);
       }
+      avatar.rows = appearanceFrames(player.appearance ?? presetAppearance(player.character)).map(
+        ({ row }) => row,
+      );
       avatar.target = player;
       if (snapshot.tick !== this.lastTick) {
         avatar.samples.push({ time: snapshot.tick * STEP_MS, player });
@@ -352,14 +352,9 @@ export class OfficeScene extends Phaser.Scene {
       avatar.shadow.setPosition(x, y).setDepth(9 + y);
       avatar.label.setPosition(x, y - 30).setDepth(10000);
       avatar.indicator.setPosition(x - avatar.label.displayWidth / 2 - 4, y - 38).setDepth(10001);
-      if (avatar.target.moving)
-        avatar.sprite.play(`${avatar.target.character}-${avatar.target.direction}`, true);
-      else {
-        avatar.sprite.stop();
-        avatar.sprite.setFrame(
-          avatar.target.character * 12 + directions.indexOf(avatar.target.direction) * 3 + 1,
-        );
-      }
+      const gait = avatar.target.moving ? Math.floor(_time / 125) % 3 : 1;
+      const frame = directions.indexOf(avatar.target.direction) * 3 + gait;
+      avatar.layers.forEach((layer, index) => layer.setFrame(avatar.rows[index] * 12 + frame));
     }
   }
 }

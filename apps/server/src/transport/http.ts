@@ -113,7 +113,7 @@ export function httpRoutes(
   app.patch('/api/profile', async (req) => {
     const session = await identity(req),
       body = profileSchema.parse(req.body);
-    await store.profile(session.userId, body.displayName, body.character);
+    await store.profile(session.userId, body.displayName, body.character, body.appearance);
     await refresh();
     return { ok: true };
   });

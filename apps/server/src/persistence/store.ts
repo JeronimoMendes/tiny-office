@@ -4,6 +4,7 @@ import { Pool, type PoolClient } from 'pg';
 import {
   canStand,
   parseMap,
+  type Appearance,
   type DeskAssignments,
   type Member,
   type TiledMap,
@@ -21,7 +22,7 @@ export type Identity = {
   expiresAt: Date;
 };
 const memberColumns =
-  'u.id, u.email, u.display_name AS "displayName", u.character, m.role, m.status, m.x, m.y';
+  'u.id, u.email, u.display_name AS "displayName", u.character, u.appearance, m.role, m.status, m.x, m.y';
 
 export class Store {
   constructor(readonly pool: Pool) {}
@@ -47,6 +48,10 @@ export class Store {
       if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 1')).rowCount) {
         await db.query(sql);
         await db.query('INSERT INTO schema_migrations VALUES (1)');
+      }
+      if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 2')).rowCount) {
+        await db.query('ALTER TABLE users ADD COLUMN appearance jsonb');
+        await db.query('INSERT INTO schema_migrations VALUES (2)');
       }
     });
   }
@@ -197,12 +202,16 @@ export class Store {
       'DELETE FROM login_tokens WHERE expires_at < now() OR consumed_at IS NOT NULL',
     );
   }
-  async profile(userId: string, displayName: string, character: number) {
-    await this.pool.query('UPDATE users SET display_name=$2,character=$3 WHERE id=$1', [
-      userId,
-      displayName,
-      character,
-    ]);
+  async profile(
+    userId: string,
+    displayName: string,
+    character: number,
+    appearance?: Appearance | null,
+  ) {
+    await this.pool.query(
+      'UPDATE users SET display_name=$2,character=$3,appearance=$4 WHERE id=$1',
+      [userId, displayName, character, appearance ? JSON.stringify(appearance) : null],
+    );
   }
   async status(workspaceId: string, userId: string, status: Member['status']) {
     await this.pool.query('UPDATE memberships SET status=$3 WHERE workspace_id=$1 AND user_id=$2', [

@@ -8,6 +8,7 @@ serve Tiled; matching @4x sheets preserve identical pixels in the renderer.
 
 import argparse
 import json
+import runpy
 import sys
 from pathlib import Path
 
@@ -399,3 +400,5 @@ if args.map:
     + '\n'
 )
 print(f'tiles {tileset.w}x{tileset.h} ({slots} slots)  props {len(props)}  avatars {avatar_sheet.w}x{avatar_sheet.h}')
+
+runpy.run_path(str(ROOT / 'tools/generate-wardrobe.py'))

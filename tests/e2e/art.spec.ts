@@ -1,7 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { move, parseMap, PROTOCOL_VERSION, type Input, type Player } from '@office/shared';
+import {
+  move,
+  parseMap,
+  PROTOCOL_VERSION,
+  type Input,
+  type Player,
+  type Member,
+} from '@office/shared';
 
 // A local rendering fixture: no authentication, database or SFU is changed.
 for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-native'] as const)
@@ -20,7 +27,7 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
     // Their 40 GIDs must never be interpreted using the original eight-tile PNG.
     if (variant.startsWith('expanded-v1')) map.tiled.tilesets[0].image = '../assets/office.png';
     const native = variant.endsWith('native');
-    const members = ['Robin', 'Penny', 'Jules', 'Sam', 'Fern', 'Kai', 'Ash', 'Wren'].map(
+    const members: Member[] = ['Robin', 'Penny', 'Jules', 'Sam', 'Fern', 'Kai', 'Ash', 'Wren'].map(
       (displayName, character) => ({
         id: `art-${character}`,
         displayName,
@@ -57,8 +64,16 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
       }
       await route.fulfill({ path: resolve(`.${pathname}`) });
     });
+    let failSave = false;
     await page.route('**/api/**', (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/profile')) {
+        if (failSave)
+          return route.fulfill({ status: 500, json: { error: 'Please try saving again.' } });
+        Object.assign(members[0], route.request().postDataJSON());
+        Object.assign(players[0], members[0]);
+        return route.fulfill({ json: { ok: true } });
+      }
       return route.fulfill({
         json: path.endsWith('/bootstrap')
           ? { required: false }
@@ -110,15 +125,96 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
     await page.keyboard.up('ArrowRight');
     await expect.poll(() => players[0].moving).toBe(false);
     await page.getByRole('button', { name: /Robin Edit your character/ }).click();
+    await page.getByText('Start with an outfit').click();
     for (let i = 1; i <= 8; i++) {
       const choice = page.getByRole('button', { name: `Character ${i}`, exact: true });
       await choice.click();
       await expect(choice).toHaveAttribute('aria-pressed', 'true');
     }
+    await page.getByText('Start with an outfit').click();
     await page.screenshot({ path: testInfo.outputPath('wardrobe.png') });
+    if (variant === 'cozy') {
+      for (const [category, option] of [
+        ['Head', 'Square'],
+        ['Skin', 'Skin tone 6'],
+        ['Hair', 'Bald'],
+        ['Shirts', 'Hoodie'],
+        ['Pants', 'Shorts'],
+        ['Shoes', 'Sandals'],
+        ['Accessories', 'None'],
+        ['Hats', 'None'],
+      ]) {
+        await page
+          .getByRole('group', { name: 'Character parts' })
+          .getByRole('button', { name: category, exact: true })
+          .click();
+        await page.getByRole('button', { name: option, exact: true }).click();
+        await expect(page.getByRole('button', { name: option, exact: true })).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        );
+      }
+      for (const direction of ['left', 'back', 'right', 'front']) {
+        await page.getByRole('button', { name: `View ${direction}` }).click();
+        await expect(page.getByRole('button', { name: `View ${direction}` })).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        );
+      }
+      await page.screenshot({ path: testInfo.outputPath('mixed-wardrobe.png') });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: testInfo.outputPath('mobile-wardrobe.png') });
+      expect(await page.locator('dialog').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+        true,
+      );
+      failSave = true;
+      await page.getByRole('button', { name: 'Save profile' }).click();
+      await expect(page.getByRole('alert')).toContainText('Please try saving again.');
+      await expect(page.getByRole('dialog')).toBeVisible();
+      failSave = false;
+      await page.getByRole('button', { name: 'Save profile' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(members[0].appearance).toMatchObject({
+        head: 2,
+        skin: 5,
+        hair: 8,
+        shirt: 1,
+        pants: 3,
+        shoes: 3,
+        accessory: 0,
+        hat: 0,
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.reload();
+      await expect(page.getByTestId('connection')).toHaveText('8 here');
+      await page.getByRole('button', { name: /Robin Edit your character/ }).click();
+      await expect(page.getByRole('button', { name: 'Square', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await page
+        .getByRole('group', { name: 'Character parts' })
+        .getByRole('button', { name: 'Hair', exact: true })
+        .click();
+      await expect(page.getByRole('button', { name: 'Bald', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await page.getByRole('button', { name: 'Curly', exact: true }).click();
+      await page.getByRole('button', { name: 'Close profile' }).click();
+      await page.getByRole('button', { name: /Robin Edit your character/ }).click();
+      await page
+        .getByRole('group', { name: 'Character parts' })
+        .getByRole('button', { name: 'Hair', exact: true })
+        .click();
+      await expect(page.getByRole('button', { name: 'Bald', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    }
     expect([...loaded]).toEqual(
       expect.arrayContaining([
-        '/assets/avatars.png',
+        '/assets/wardrobe/head.png',
         variant === 'legacy' ? '/assets/office@4x.png' : '/assets/office-cozy@4x.png',
         '/assets/props.png',
       ]),

@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { appearanceSchema, type Appearance } from './appearance';
 import type { TiledMap } from './map';
 import { headings, type Motion } from './movement';
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const statusSchema = z.enum(['free', 'focus', 'do-not-disturb']);
 export const headingSchema = z.enum(
   Object.keys(headings) as [keyof typeof headings, ...(keyof typeof headings)[]],
@@ -19,6 +20,7 @@ export type Player = Motion & {
   id: string;
   displayName: string;
   character: number;
+  appearance?: Appearance | null;
   status: Status;
   zoneId: string | null;
 };
@@ -27,6 +29,7 @@ export type Member = {
   email: string;
   displayName: string;
   character: number;
+  appearance?: Appearance | null;
   role: 'owner' | 'member';
   status: Status;
 };
@@ -62,6 +65,7 @@ export const profileSchema = z
   .object({
     displayName: z.string().trim().min(1).max(40),
     character: z.number().int().min(0).max(7),
+    appearance: appearanceSchema.nullable().optional(),
   })
   .strict();
 export const inviteSchema = z

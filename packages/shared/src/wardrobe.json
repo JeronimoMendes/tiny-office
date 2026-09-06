@@ -1,0 +1,42 @@
+{
+  "head": ["Oval", "Round", "Square", "Heart"],
+  "skin": ["#f0d3b4", "#e3bd96", "#d8a97f", "#c58c5f", "#9c6b47", "#6f4a32"],
+  "hair": ["Short", "Bob", "Curly", "Ponytail", "Bun", "Wavy", "Buzz", "Long", "Bald"],
+  "hairColor": [
+    "#3b2f2a",
+    "#8c5a34",
+    "#1f1a17",
+    "#c9a24d",
+    "#5f4136",
+    "#a0402e",
+    "#5f6f8c",
+    "#d9d2c4"
+  ],
+  "shirt": ["Tee", "Hoodie", "Blazer", "Sweater", "Cardigan", "Turtleneck", "Overalls", "Vest"],
+  "shirtColor": [
+    "#6d9089",
+    "#c4826a",
+    "#4d6377",
+    "#dfb066",
+    "#6f9a63",
+    "#7a6a9c",
+    "#5c7484",
+    "#c9705f"
+  ],
+  "pants": ["Trousers", "Jeans", "Chinos", "Shorts", "Skirt", "Joggers"],
+  "pantsColor": ["#4a5a66", "#3f4a52", "#2f3a44", "#5c7484", "#d8cdb6", "#343c40", "#45525a"],
+  "shoes": ["Sneakers", "Boots", "Loafers", "Sandals"],
+  "shoesColor": [
+    "#39423d",
+    "#2f3a35",
+    "#33302c",
+    "#7d5b3c",
+    "#4a4038",
+    "#2c3330",
+    "#6b5a44",
+    "#3a3d37",
+    "#eee7d6"
+  ],
+  "accessory": ["None", "Glasses", "Headphones", "Scarf"],
+  "hat": ["None", "Beanie"]
+}

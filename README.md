@@ -19,7 +19,7 @@ Open **http://localhost:3000**. The app prints a **bootstrap secret** in its sta
 2. Enter a coworker's email and name and create a sign-in link.
 3. Send that link privately to that person. It works **once** and expires after **24 hours**.
 4. Assign their desk with the desk dropdowns. Each person can own one desk; anyone may enter it.
-5. Use **WASD / arrow keys** to walk. Click your name in the bottom bar to edit your name and character. Collapse the people panel for more map space.
+5. Use **WASD / arrow keys** to walk. Click your name in the bottom bar to edit your name and character. Mix head shapes, full-body skin tones, hairstyles, shirts, pants and shoes, with independent hair/clothing colors and a four-direction preview; save to update your character for everyone. Collapse the people panel for more map space.
 
 One active game connection per person/workspace. Opening another tab replaces the previous connection instead of creating a duplicate avatar. Separate people should use separate browser profiles, private windows or devices.
 
@@ -131,7 +131,7 @@ python3 tools/generate-assets.py
 
 Add `--map` to also replace `maps/office.tmj` with the furnished starter office. Import that map explicitly using the workflow above to update an existing workspace's layout. Existing eight-tile maps continue to use a compatible, refreshed `office.png`; new maps use `office-cozy.png`.
 
-The eight character presets have registered head, hair, clothing, shoe, accessory and hat layers. Desks have clean surfaces, with 18 separate prop sprites placed at pixel coordinates. Artwork conventions and the future customization path are in [assets/ART.md](assets/ART.md). The current UI still selects complete characters; wardrobe editing and dragging desk items are future features.
+The eight character presets have registered head, hair, clothing, shoe, accessory and hat layers. Desks have clean surfaces, with 18 separate prop sprites placed at pixel coordinates. Artwork conventions and the future customization path are in [assets/ART.md](assets/ART.md). The character editor composes independent layers in both the preview and the walking avatar. It offers four heads, six skin tones, nine hairstyles, eight shirts, six bottoms and four shoe styles, plus palette choices, accessories, hats and eight starter outfits. Choices persist in PostgreSQL and broadcast to the office; existing character numbers resolve to their starter outfits. Dragging desk items remains a future feature.
 
 No third-party artwork is included. Generated artwork is CC0; see [assets/LICENSE.md](assets/LICENSE.md).
 
@@ -207,7 +207,7 @@ E2E_ALLOW_BOOTSTRAP=1 npm run test:e2e
 docker compose -p office-e2e down -v
 ```
 
-Coverage: 26 unit tests, 9 PostgreSQL/real-WebSocket integration tests and 1 two-browser end-to-end test. These cover zone boundaries and map validation, movement authority/input abuse, serialized/debounced persistence including failure retries, single-use link redemption, role/workspace/origin authorization, profile/desks and empty-server restoration, and 30 simultaneous socket clients. For media they cover the policy decisions themselves, SFU reconciliation against a fake room service, zone-scoped credential contents over real HTTP/WebSockets, revocation on focus/DND/zone changes, and two browsers actually exchanging audio and video through the SFU using Chromium's fake devices. The 30-client check is a local functional smoke test, not a WAN latency benchmark. The isolated `tests/e2e/art.spec.ts` browser fixture loads the artwork, checks movement and every character choice, and writes office/wardrobe screenshots without a database or SFU. It also checks compatibility with the original eight-tile map, native tileset fallback, and exact character-layer compositing. There are no screenshot baseline assertions.
+Coverage: 31 unit tests, 10 PostgreSQL/real-WebSocket integration tests and 1 two-browser end-to-end test. These cover zone boundaries and map validation, movement authority/input abuse, serialized/debounced persistence including failure retries, single-use link redemption, role/workspace/origin authorization, profile/desks and empty-server restoration, and 30 simultaneous socket clients. For media they cover the policy decisions themselves, SFU reconciliation against a fake room service, zone-scoped credential contents over real HTTP/WebSockets, revocation on focus/DND/zone changes, and two browsers actually exchanging audio and video through the SFU using Chromium's fake devices. The 30-client check is a local functional smoke test, not a WAN latency benchmark. The isolated `tests/e2e/art.spec.ts` browser fixture loads the artwork, checks movement, preset choices, mixed wardrobes, save/reload, failed saves and cancellation, and writes office/wardrobe screenshots without a database or SFU. It also checks compatibility with the original eight-tile map, native tileset fallback, and exact character-layer compositing. There are no screenshot baseline assertions.
 
 ## How calls work
 
