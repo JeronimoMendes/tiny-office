@@ -96,7 +96,7 @@ Open **`maps/office.tmj`** in [Tiled](https://www.mapeditor.org/). No applicatio
 Supported, intentionally small Tiled subset:
 
 - Finite orthogonal maps, **32 × 32px tiles**, up to 256 × 256 tiles.
-- One **embedded** tileset with first GID 1, 32px tiles, no spacing/margin, image at `../assets/<filename>.png`. Copy replacement images into `assets/`.
+- One **embedded** tileset with first GID 1, 32px tiles, no spacing/margin, image at `../assets/<filename>.png`. Copy replacement images into `assets/`. The client prefers a supersampled sibling — `office.png` in the map means `office@4x.png` on screen — using nearest-neighbor sampling to keep the original 32px pixel grid crisp.
 - Uncompressed numeric-array tile layer data. No infinite chunks, group layers, external `.tsx`, flipped tiles or layer offsets. Unsupported data is rejected rather than silently interpreted differently.
 - Tile layers matching map dimensions. Visible tile layers render in file order, behind avatars.
 - A tile layer named **`collision`**: any nonzero tile is solid. Hide this layer in Tiled. The server uses it regardless of visibility. Visible furniture does not automatically collide; paint its collision cells too.
@@ -104,6 +104,7 @@ Supported, intentionally small Tiled subset:
   - `zoneId`: stable unique ID, such as `desk-1` or `cedar`.
   - `kind`: `desk`, `meeting` or `open`.
   - Object name: visible zone label.
+- An optional object layer named **`props`**: points with a string property `prop` naming an entry in `assets/props.json`, drawn on top of the tiles at that exact spot. Desk clutter lives here rather than in the tileset, so a desk can be dressed without redrawing a tile.
 - An object layer named **`spawn`**, with its first object a point in a walkable location. The avatar's position is its foot center, with a 14 × 12px collision footprint.
 
 Desk and meeting rectangles cannot overlap. Optional open-floor rectangles may cover them; specific call zones win. Outside all rectangles is also open floor. Membership uses foot-center containment, including top/left edges and excluding bottom/right edges. Players do not collide with one another.
@@ -122,13 +123,17 @@ docker compose up -d app
 
 `maps/` and `assets/` are bind-mounted read-only, so map/art editing needs no image rebuild. The importer refuses to run if an authoritative server still owns that workspace. A valid import creates a new DB revision. Existing stable desk IDs retain assignments; removing/changing a desk zone removes its assignment. Invalid imports leave the active map untouched. Old revisions remain in the database. Clients reconnect with a full snapshot of the new map.
 
-To regenerate the **original placeholder** art and starter map (overwrites `maps/office.tmj`):
+To regenerate the pixel artwork (Python standard library only; preserves your map):
 
 ```sh
 python3 tools/generate-assets.py
 ```
 
-No third-party artwork is included. Generated artwork is CC0; see [assets/LICENSE.md](assets/LICENSE.md). Placeholder art is the only intentionally disposable component.
+Add `--map` to also replace `maps/office.tmj` with the furnished starter office. Import that map explicitly using the workflow above to update an existing workspace's layout. Existing eight-tile maps continue to use a compatible, refreshed `office.png`; new maps use `office-cozy.png`.
+
+The eight character presets have registered head, hair, clothing, shoe, accessory and hat layers. Desks have clean surfaces, with 18 separate prop sprites placed at pixel coordinates. Artwork conventions and the future customization path are in [assets/ART.md](assets/ART.md). The current UI still selects complete characters; wardrobe editing and dragging desk items are future features.
+
+No third-party artwork is included. Generated artwork is CC0; see [assets/LICENSE.md](assets/LICENSE.md).
 
 ## Develop
 
@@ -202,7 +207,7 @@ E2E_ALLOW_BOOTSTRAP=1 npm run test:e2e
 docker compose -p office-e2e down -v
 ```
 
-Coverage: 26 unit tests, 9 PostgreSQL/real-WebSocket integration tests and 1 two-browser end-to-end test. These cover zone boundaries and map validation, movement authority/input abuse, serialized/debounced persistence including failure retries, single-use link redemption, role/workspace/origin authorization, profile/desks and empty-server restoration, and 30 simultaneous socket clients. For media they cover the policy decisions themselves, SFU reconciliation against a fake room service, zone-scoped credential contents over real HTTP/WebSockets, revocation on focus/DND/zone changes, and two browsers actually exchanging audio and video through the SFU using Chromium's fake devices. The 30-client check is a local functional smoke test, not a WAN latency benchmark. There are no renderer unit tests or screenshot assertions.
+Coverage: 26 unit tests, 9 PostgreSQL/real-WebSocket integration tests and 1 two-browser end-to-end test. These cover zone boundaries and map validation, movement authority/input abuse, serialized/debounced persistence including failure retries, single-use link redemption, role/workspace/origin authorization, profile/desks and empty-server restoration, and 30 simultaneous socket clients. For media they cover the policy decisions themselves, SFU reconciliation against a fake room service, zone-scoped credential contents over real HTTP/WebSockets, revocation on focus/DND/zone changes, and two browsers actually exchanging audio and video through the SFU using Chromium's fake devices. The 30-client check is a local functional smoke test, not a WAN latency benchmark. The isolated `tests/e2e/art.spec.ts` browser fixture loads the artwork, checks movement and every character choice, and writes office/wardrobe screenshots without a database or SFU. It also checks compatibility with the original eight-tile map, native tileset fallback, and exact character-layer compositing. There are no screenshot baseline assertions.
 
 ## How calls work
 

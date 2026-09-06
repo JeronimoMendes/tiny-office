@@ -4,6 +4,7 @@ import type { SessionInfo } from '@office/shared';
 import { OfficeSession, api } from './session/session';
 import { mountOffice } from './game/mount';
 import { OwnerPanel, ProfileDialog } from './ui/Account';
+import { Avatar } from './ui/Avatar';
 import './ui/styles.css';
 
 const MediaControls = lazy(() =>
@@ -311,13 +312,4 @@ function Office({ info }: { info: SessionInfo }) {
   );
 }
 
-export function Avatar({ character }: { character: number }) {
-  return (
-    <span
-      className="pixel-avatar"
-      style={{ backgroundPosition: `-24px -${character * 32}px` }}
-      aria-hidden="true"
-    />
-  );
-}
 createRoot(document.getElementById('root')!).render(<App />);

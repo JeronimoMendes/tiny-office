@@ -1,6 +1,8 @@
 # Artwork license
 
-`office.png` and `avatars.png` are original generated placeholder pixel art for this project, created by `tools/generate-assets.py`. They contain no third-party artwork.
+`office.png`, `office@4x.png`, `office-cozy.png`, `office-cozy@4x.png`, `props.png`, `avatars.png` and `avatar-layers/*.png` are original generated artwork for this project, drawn by `tools/generate-assets.py` with the small rasterizer in `tools/draw.py`. They contain no third-party artwork.
+
+`office-cozy.png` is the 32px starter tileset; `office.png` preserves the original eight tile IDs for saved maps. Their `@4x` siblings contain the same pixels at the resolution the client renders. `props.json` and `avatars.json` describe what is in the sheets.
 
 To the extent possible under law, the authors dedicate these generated images to the public domain under **CC0 1.0 Universal**: https://creativecommons.org/publicdomain/zero/1.0/legalcode
 

@@ -1,0 +1,133 @@
+{
+  "frameWidth": 96,
+  "frameHeight": 128,
+  "scale": 4,
+  "anchor": [
+    0.5,
+    1
+  ],
+  "layerOrder": [
+    "hair_back",
+    "body",
+    "pants",
+    "shoes",
+    "shirt",
+    "hands",
+    "head",
+    "hair",
+    "accessory",
+    "hat"
+  ],
+  "layers": {
+    "hair_back": "avatar-layers/hair_back.png",
+    "body": "avatar-layers/body.png",
+    "pants": "avatar-layers/pants.png",
+    "shoes": "avatar-layers/shoes.png",
+    "shirt": "avatar-layers/shirt.png",
+    "hands": "avatar-layers/hands.png",
+    "head": "avatar-layers/head.png",
+    "hair": "avatar-layers/hair.png",
+    "accessory": "avatar-layers/accessory.png",
+    "hat": "avatar-layers/hat.png"
+  },
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "frames": 3,
+  "characters": [
+    {
+      "skin": "e3bd96",
+      "hair": "3b2f2a",
+      "hair_style": "short",
+      "top": "6d9089",
+      "top_style": "tee",
+      "bottom": "4a5a66",
+      "shoes": "39423d",
+      "head_style": "oval"
+    },
+    {
+      "skin": "f0d3b4",
+      "hair": "8c5a34",
+      "hair_style": "bob",
+      "top": "c4826a",
+      "top_style": "hoodie",
+      "bottom": "3f4a52",
+      "shoes": "2f3a35",
+      "accessory": "glasses",
+      "head_style": "round"
+    },
+    {
+      "skin": "9c6b47",
+      "hair": "1f1a17",
+      "hair_style": "curly",
+      "top": "4d6377",
+      "top_style": "blazer",
+      "inner": "f2eddd",
+      "bottom": "2f3a44",
+      "shoes": "33302c",
+      "head_style": "oval"
+    },
+    {
+      "skin": "d8a97f",
+      "hair": "c9a24d",
+      "hair_style": "ponytail",
+      "top": "dfb066",
+      "top_style": "sweater",
+      "bottom": "5c7484",
+      "bottom_style": "skirt",
+      "shoes": "7d5b3c",
+      "head_style": "round"
+    },
+    {
+      "skin": "6f4a32",
+      "hair": "5f4136",
+      "hair_style": "bun",
+      "top": "6f9a63",
+      "top_style": "cardigan",
+      "inner": "efe8d6",
+      "bottom": "d8cdb6",
+      "shoes": "4a4038",
+      "head_style": "oval"
+    },
+    {
+      "skin": "f0d3b4",
+      "hair": "a0402e",
+      "hair_style": "wavy",
+      "top": "7a6a9c",
+      "top_style": "turtleneck",
+      "bottom": "343c40",
+      "shoes": "2c3330",
+      "accessory": "headphones",
+      "head_style": "round"
+    },
+    {
+      "skin": "c58c5f",
+      "hair": "5f6f8c",
+      "hair_style": "buzz",
+      "top": "5c7484",
+      "top_style": "overalls",
+      "inner": "ece5d2",
+      "bottom": "5c7484",
+      "shoes": "6b5a44",
+      "accent": "c9705f",
+      "hat": "beanie",
+      "head_style": "oval"
+    },
+    {
+      "skin": "e3bd96",
+      "hair": "d9d2c4",
+      "hair_style": "long",
+      "top": "c9705f",
+      "top_style": "vest",
+      "inner": "f2eddd",
+      "bottom": "45525a",
+      "shoes": "3a3d37",
+      "accessory": "scarf",
+      "accent": "dfb066",
+      "head_style": "round"
+    }
+  ]
+}

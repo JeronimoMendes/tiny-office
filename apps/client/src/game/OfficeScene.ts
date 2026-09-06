@@ -1,6 +1,52 @@
 import Phaser from 'phaser';
-import { heading, parseMap, STEP_MS, type Direction, type Player } from '@office/shared';
+import {
+  heading,
+  parseMap,
+  STEP_MS,
+  type Direction,
+  type Player,
+  type TiledMap,
+} from '@office/shared';
 import type { RendererBridge, RenderSnapshot } from '../session/bridge';
+
+// Bundled artwork uses 4x sheets with hard 4px blocks: each block is one world
+// pixel. Custom tilesets can provide a matching @4x sibling or a native PNG.
+const ART = 4;
+// Character frames share the world pixel scale and their bottom-center anchor.
+const AVATAR = 1 / ART;
+// Labels are built oversized and scaled down so they stay sharp under camera zoom.
+const LABEL = 3;
+const DEPTH = { props: 5, zones: 6, labels: 7 };
+
+type PropManifest = {
+  scale: number;
+  anchor: [number, number];
+  items: { name: string; label: string; frame: number }[];
+};
+
+// Phaser is handed the map described at the artwork's own resolution and the
+// layers are scaled back down, so the simulation keeps its 32px cells while the
+// tiles keep every pixel they were drawn with.
+function artResolution(map: TiledMap, scale: number) {
+  const [tileset] = map.tilesets;
+  const width = tileset.tilewidth * scale;
+  const height = tileset.tileheight * scale;
+  return {
+    ...map,
+    tilewidth: map.tilewidth * scale,
+    tileheight: map.tileheight * scale,
+    tilesets: [
+      {
+        ...tileset,
+        tilewidth: width,
+        tileheight: height,
+        // Phaser counts the tiles it can cut from these, so they have to grow too.
+        imagewidth: tileset.columns * width,
+        imageheight: Math.ceil(tileset.tilecount / tileset.columns) * height,
+      },
+    ],
+  };
+}
 
 type Sample = { time: number; player: Player };
 type Avatar = {
@@ -34,37 +80,65 @@ export class OfficeScene extends Phaser.Scene {
     this.zones = parseMap(initial.workspace.map).zones;
   }
   preload() {
-    this.load.image(
-      'office-tiles',
-      `/assets/${this.snapshot.workspace.map.tilesets[0].image.split('/').pop()}`,
-    );
-    this.load.spritesheet('avatars', '/assets/avatars.png', { frameWidth: 24, frameHeight: 32 });
+    const declared = this.snapshot.workspace.map.tilesets[0];
+    // The first expanded starter map reused office.png before its 40-tile sheet
+    // was renamed. Persisted revisions still carry that filename; select by its
+    // layout too, so GID 2 remains alternate wood instead of becoming a wall.
+    const image =
+      declared.image === '../assets/office.png' &&
+      declared.columns === 8 &&
+      declared.tilecount === 40
+        ? 'office-cozy.png'
+        : declared.image.split('/').pop();
+    const tileset = `/assets/${image}`;
+    this.load.image('office-tiles', tileset.replace(/\.png$/, `@${ART}x.png`));
+    // A replacement tileset need not ship a supersampled sibling.
+    let fallback = false;
+    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      if (file.key !== 'office-tiles' || fallback) return;
+      fallback = true;
+      this.load.image('office-tiles', tileset);
+    });
+    this.load.spritesheet('avatars', '/assets/avatars.png', { frameWidth: 96, frameHeight: 128 });
+    this.load.spritesheet('props', '/assets/props.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.json('props-manifest', '/assets/props.json');
   }
   create() {
     const parsed = parseMap(this.snapshot.workspace.map);
+    const [declared] = parsed.tiled.tilesets;
+    // Measure the sheet that actually loaded rather than trusting a constant, so
+    // a hand-drawn replacement at any resolution still lands on the same grid.
+    const source = this.textures.get('office-tiles').getSourceImage();
+    const scale = Math.max(source.width / (declared.columns * declared.tilewidth), 1);
     this.cache.tilemap.add('office-map', {
       format: Phaser.Tilemaps.Formats.TILED_JSON,
-      data: this.snapshot.workspace.map,
+      data: artResolution(this.snapshot.workspace.map, scale),
     });
     const map = this.make.tilemap({ key: 'office-map' });
-    const tiles = map.addTilesetImage(parsed.tiled.tilesets[0].name, 'office-tiles')!;
+    const tiles = map.addTilesetImage(declared.name, 'office-tiles')!;
+    let depth = 0;
     for (const layer of parsed.tiled.layers)
       if (layer.type === 'tilelayer' && layer.name !== 'collision' && layer.visible)
-        map.createLayer(layer.name, tiles)?.setDepth(0);
-    const outlines = this.add.graphics().setDepth(1);
+        map
+          .createLayer(layer.name, tiles)
+          ?.setScale(1 / scale)
+          .setDepth(depth++);
+    this.decorate(parsed.tiled);
+    const outlines = this.add.graphics().setDepth(DEPTH.zones);
     for (const zone of parsed.zones) {
-      outlines.lineStyle(1, zone.kind === 'meeting' ? 0xdde5cf : 0xe9d6a7, 0.4);
-      outlines.strokeRoundedRect(zone.x + 2, zone.y + 2, zone.width - 4, zone.height - 4, 5);
+      outlines.lineStyle(1.5, zone.kind === 'meeting' ? 0xe4ecdb : 0xf0dcac, 0.32);
+      outlines.strokeRoundedRect(zone.x + 3, zone.y + 3, zone.width - 6, zone.height - 6, 8);
       const label = this.add
-        .text(zone.x + zone.width / 2, zone.y + 9, zone.name, {
-          fontFamily: 'monospace',
-          fontSize: '9px',
+        .text(zone.x + zone.width / 2, zone.y + 8, zone.name, {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: `${9 * LABEL}px`,
           color: '#f4efdf',
-          backgroundColor: '#657162',
-          padding: { x: 5, y: 3 },
+          backgroundColor: '#4d584bcc',
+          padding: { x: 6 * LABEL, y: 3 * LABEL },
         })
         .setOrigin(0.5, 0)
-        .setDepth(2);
+        .setScale(1 / LABEL)
+        .setDepth(DEPTH.labels);
       this.zoneLabels.set(zone.id, label);
     }
     for (let character = 0; character < 8; character++)
@@ -79,10 +153,7 @@ export class OfficeScene extends Phaser.Scene {
           repeat: -1,
         });
       }
-    this.cameras.main
-      .setBounds(0, 0, parsed.width, parsed.height)
-      .setZoom(1.6)
-      .setRoundPixels(true);
+    this.cameras.main.setBounds(0, 0, parsed.width, parsed.height).setZoom(2);
     this.cameras.main.setBackgroundColor('#3f4a40');
     this.unsubscribe = this.bridge.subscribe((snapshot) => this.receive(snapshot));
     window.addEventListener('keydown', this.keyDown);
@@ -99,6 +170,47 @@ export class OfficeScene extends Phaser.Scene {
       this.avatars.clear();
       this.zoneLabels.clear();
     });
+  }
+  // Desk props live in the map as points, so a workspace can be dressed — and
+  // later personalised — without redrawing a tile.
+  private decorate(tiled: TiledMap) {
+    const manifest = this.cache.json.get('props-manifest') as PropManifest | undefined;
+    if (!manifest) return;
+    const frames = new Map(manifest.items.map((item) => [item.name, item.frame]));
+    const layer = tiled.layers.find((l) => l.name === 'props' && l.type === 'objectgroup');
+    // Persisted starter maps used eight GIDs and had no prop layer. Dress their
+    // clean desk tiles with separate sprites, preserving every saved position.
+    if (
+      !layer &&
+      tiled.tilesets[0].image === '../assets/office.png' &&
+      tiled.tilesets[0].tilecount === 8
+    ) {
+      for (const tiles of tiled.layers) {
+        if (tiles.type !== 'tilelayer' || !tiles.visible || tiles.name === 'collision') continue;
+        tiles.data?.forEach((gid, cell) => {
+          if (gid !== 3) return;
+          const x = (cell % tiled.width) * 32 + 16;
+          const y = Math.floor(cell / tiled.width) * 32 + 15;
+          this.add
+            .image(x, y, 'props', frames.get('monitor'))
+            .setOrigin(manifest.anchor[0], manifest.anchor[1])
+            .setScale(0.65 / manifest.scale)
+            .setDepth(DEPTH.props + y / 10000);
+        });
+      }
+    }
+    if (!layer?.visible) return;
+    for (const object of layer.objects ?? []) {
+      if (object.visible === false) continue;
+      const frame = frames.get(String(object.properties.find((p) => p.name === 'prop')?.value));
+      if (frame === undefined) continue;
+      this.add
+        .image(object.x, object.y, 'props', frame)
+        .setOrigin(manifest.anchor[0], manifest.anchor[1])
+        .setScale(1 / manifest.scale)
+        .setDepth(DEPTH.props + object.y / 10000)
+        .setAlpha(layer.opacity);
+    }
   }
   private keyDirection(key: string): Direction | undefined {
     return (
@@ -172,17 +284,21 @@ export class OfficeScene extends Phaser.Scene {
       let avatar = this.avatars.get(player.id);
       if (!avatar) {
         avatar = {
-          sprite: this.add.sprite(player.x, player.y + 4, 'avatars').setOrigin(0.5, 1),
+          sprite: this.add
+            .sprite(player.x, player.y + 4, 'avatars')
+            .setOrigin(0.5, 1)
+            .setScale(AVATAR),
           label: this.add
             .text(player.x, player.y - 34, player.displayName, {
-              fontFamily: 'system-ui',
-              fontSize: '9px',
+              fontFamily: 'system-ui, sans-serif',
+              fontSize: `${9 * LABEL}px`,
               color: '#fff8e9',
               backgroundColor: '#3c4940dd',
-              padding: { x: 5, y: 2 },
+              padding: { x: 5 * LABEL, y: 2 * LABEL },
             })
-            .setOrigin(0.5, 1),
-          shadow: this.add.ellipse(player.x, player.y, 18, 7, 0x293c34, 0.25),
+            .setOrigin(0.5, 1)
+            .setScale(1 / LABEL),
+          shadow: this.add.ellipse(player.x, player.y, 20, 8, 0x293c34, 0.22),
           indicator: this.add.circle(player.x, player.y - 38, 3, statusColors[player.status]),
           samples: [],
           target: player,
@@ -235,7 +351,7 @@ export class OfficeScene extends Phaser.Scene {
       avatar.sprite.setPosition(x, y + 4).setDepth(10 + y);
       avatar.shadow.setPosition(x, y).setDepth(9 + y);
       avatar.label.setPosition(x, y - 30).setDepth(10000);
-      avatar.indicator.setPosition(x - avatar.label.width / 2 - 4, y - 38).setDepth(10001);
+      avatar.indicator.setPosition(x - avatar.label.displayWidth / 2 - 4, y - 38).setDepth(10001);
       if (avatar.target.moving)
         avatar.sprite.play(`${avatar.target.character}-${avatar.target.direction}`, true);
       else {

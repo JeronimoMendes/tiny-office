@@ -11,7 +11,6 @@ export function mountOffice(parent: HTMLElement, bridge: RendererBridge): () => 
       parent,
       backgroundColor: '#3f4a40',
       pixelArt: true,
-      antialias: false,
       roundPixels: true,
       scale: { mode: Phaser.Scale.RESIZE, width: parent.clientWidth, height: parent.clientHeight },
       scene: new OfficeScene(bridge, snapshot),

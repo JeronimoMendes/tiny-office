@@ -1,0 +1,101 @@
+{
+  "cell": 128,
+  "columns": 6,
+  "scale": 4,
+  "anchor": [
+    0.5,
+    0.82
+  ],
+  "items": [
+    {
+      "name": "monitor",
+      "label": "Monitor",
+      "frame": 0
+    },
+    {
+      "name": "laptop",
+      "label": "Laptop",
+      "frame": 1
+    },
+    {
+      "name": "keyboard",
+      "label": "Keyboard",
+      "frame": 2
+    },
+    {
+      "name": "mug",
+      "label": "Mug",
+      "frame": 3
+    },
+    {
+      "name": "lamp",
+      "label": "Desk lamp",
+      "frame": 4
+    },
+    {
+      "name": "succulent",
+      "label": "Succulent",
+      "frame": 5
+    },
+    {
+      "name": "cactus",
+      "label": "Cactus",
+      "frame": 6
+    },
+    {
+      "name": "books",
+      "label": "Books",
+      "frame": 7
+    },
+    {
+      "name": "photo",
+      "label": "Photo frame",
+      "frame": 8
+    },
+    {
+      "name": "notepad",
+      "label": "Notepad",
+      "frame": 9
+    },
+    {
+      "name": "pencils",
+      "label": "Pencil cup",
+      "frame": 10
+    },
+    {
+      "name": "headphones",
+      "label": "Headphones",
+      "frame": 11
+    },
+    {
+      "name": "cat",
+      "label": "Office cat",
+      "frame": 12
+    },
+    {
+      "name": "duck",
+      "label": "Rubber duck",
+      "frame": 13
+    },
+    {
+      "name": "trophy",
+      "label": "Trophy",
+      "frame": 14
+    },
+    {
+      "name": "speaker",
+      "label": "Speaker",
+      "frame": 15
+    },
+    {
+      "name": "stickies",
+      "label": "Sticky notes",
+      "frame": 16
+    },
+    {
+      "name": "terrarium",
+      "label": "Terrarium",
+      "frame": 17
+    }
+  ]
+}

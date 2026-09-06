@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, type FormEvent } from 'react';
 import { parseMap, type Member } from '@office/shared';
 import { api, type SessionView } from '../session/session';
+import { Avatar } from './Avatar';
 
 export function OwnerPanel({ view }: { view: SessionView }) {
   const [link, setLink] = useState(''),
@@ -162,10 +163,7 @@ export function ProfileDialog({ user, onClose }: { user: Member; onClose: () => 
                 aria-pressed={character === i}
                 onClick={() => setCharacter(i)}
               >
-                <span
-                  className="pixel-avatar"
-                  style={{ backgroundPosition: `-24px -${i * 32}px` }}
-                />
+                <Avatar character={i} scale={1.5} />
               </button>
             ))}
           </div>

@@ -129,7 +129,6 @@ form .primary {
 }
 .map-stage canvas {
   display: block;
-  image-rendering: pixelated;
 }
 .topbar {
   position: absolute;
@@ -263,15 +262,13 @@ form .primary {
   padding: 10px 7px;
   border-bottom: 1px solid #d3ddbc0b;
 }
-.pixel-avatar {
+.avatar-chip {
+  image-rendering: pixelated;
   display: inline-block;
   background-image: url('/assets/avatars.png');
-  width: 24px;
-  height: 32px;
-  image-rendering: pixelated;
+  background-repeat: no-repeat;
   flex-shrink: 0;
-  transform: scale(1.15);
-  margin: 0 4px;
+  margin: 0 5px;
 }
 .person-details {
   display: grid;
@@ -410,7 +407,7 @@ form .primary {
   background: none;
   text-align: left;
 }
-.identity-button > span:not(.pixel-avatar) {
+.identity-button > span:not(.avatar-chip) {
   display: grid;
   gap: 5px;
 }
@@ -592,7 +589,7 @@ kbd {
   gap: 8px;
 }
 .character-grid button {
-  height: 59px;
+  height: 74px;
   background: #ffffff05;
 }
 .character-grid button.selected {

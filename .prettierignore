@@ -2,5 +2,6 @@ node_modules/
 dist/
 package-lock.json
 maps/
+assets/
 playwright-report/
 test-results/
