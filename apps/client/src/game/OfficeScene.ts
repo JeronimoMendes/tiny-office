@@ -225,6 +225,7 @@ export class OfficeScene extends Phaser.Scene {
   private keyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement;
     if (
+      document.querySelector('.whiteboard-dialog') ||
       target.closest('input,textarea,select,[contenteditable],dialog') ||
       event.metaKey ||
       event.ctrlKey ||

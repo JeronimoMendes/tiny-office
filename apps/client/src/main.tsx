@@ -1,6 +1,14 @@
-import React, { lazy, Suspense, useEffect, useState, useSyncExternalStore, useRef } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useRef,
+} from 'react';
 import { createRoot } from 'react-dom/client';
-import type { SessionInfo } from '@office/shared';
+import { parseMap, type SessionInfo } from '@office/shared';
 import { OfficeSession, api } from './session/session';
 import { mountOffice } from './game/mount';
 import { OwnerPanel, ProfileDialog } from './ui/Account';
@@ -9,6 +17,16 @@ import './ui/styles.css';
 
 const MediaControls = lazy(() =>
   import('./ui/Media').then((module) => ({ default: module.MediaControls })),
+);
+const WhiteboardDialog = lazy(() =>
+  import('./ui/Whiteboard').then((module) => ({
+    default: module.WhiteboardDialog,
+  })),
+);
+const WhiteboardPreview = lazy(() =>
+  import('./ui/Whiteboard').then((module) => ({
+    default: module.WhiteboardPreview,
+  })),
 );
 
 // Read personal link secrets once and remove them before any network activity.
@@ -118,6 +136,7 @@ function Office({ info }: { info: SessionInfo }) {
   const [profile, setProfile] = useState(false);
   const [error, setError] = useState('');
   const [statusBusy, setStatusBusy] = useState(false);
+  const [whiteboardOpen, setWhiteboardOpen] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     session.start();
@@ -128,11 +147,54 @@ function Office({ info }: { info: SessionInfo }) {
     };
   }, [session]);
   const self = view.players.find((p) => p.id === view.user.id);
+  const whiteboardZones = useMemo(() => parseMap(view.workspace.map).zones, [view.workspace.map]);
+  const meetingZone = whiteboardZones.find(
+    (zone) => zone.id === self?.zoneId && zone.kind === 'meeting',
+  );
+  const nearWhiteboard = Boolean(
+    meetingZone &&
+    self &&
+    Math.hypot(self.x - (meetingZone.x + meetingZone.width / 2), self.y - meetingZone.y) < 105,
+  );
+  const roomBoard = view.whiteboard?.zoneId === self?.zoneId ? view.whiteboard : null;
   const zones = view.workspace.map.layers.find((l) => l.name === 'zones')?.objects ?? [];
   const zoneName = (id: string | null) =>
     zones.find((z) => z.properties.some((p) => p.name === 'zoneId' && p.value === id))?.name ??
     'Open floor';
   const online = new Set(view.players.map((p) => p.id));
+  useEffect(() => {
+    if (whiteboardOpen && self?.zoneId !== whiteboardOpen) {
+      session.closeWhiteboard(whiteboardOpen);
+      setWhiteboardOpen(null);
+    }
+  }, [self?.zoneId, session, whiteboardOpen]);
+  useEffect(() => {
+    const openFromKeyboard = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        event.code !== 'Space' ||
+        event.repeat ||
+        whiteboardOpen ||
+        !nearWhiteboard ||
+        !meetingZone ||
+        target.closest('input,textarea,select,[contenteditable],dialog')
+      )
+        return;
+      event.preventDefault();
+      setWhiteboardOpen(meetingZone.id);
+      session.openWhiteboard(meetingZone.id);
+    };
+    window.addEventListener('keydown', openFromKeyboard);
+    return () => window.removeEventListener('keydown', openFromKeyboard);
+  }, [meetingZone, nearWhiteboard, session, whiteboardOpen]);
+  function openWhiteboard(zoneId: string) {
+    setWhiteboardOpen(zoneId);
+    session.openWhiteboard(zoneId);
+  }
+  function closeWhiteboard() {
+    if (whiteboardOpen) session.closeWhiteboard(whiteboardOpen);
+    setWhiteboardOpen(null);
+  }
   async function setStatus(status: SessionInfo['user']['status']) {
     setStatusBusy(true);
     setError('');
@@ -199,6 +261,26 @@ function Office({ info }: { info: SessionInfo }) {
         <div className="connection-banner error" role="alert">
           {error}
         </div>
+      )}
+      {nearWhiteboard && !whiteboardOpen && !roomBoard && (
+        <div className="whiteboard-hint glass" role="status">
+          <span aria-hidden="true">✎</span>
+          <div>
+            <strong>Use the whiteboard</strong>
+            <small>
+              Press <kbd>Space</kbd> to start drawing
+            </small>
+          </div>
+        </div>
+      )}
+      {roomBoard && !whiteboardOpen && (
+        <Suspense fallback={null}>
+          <WhiteboardPreview
+            board={roomBoard}
+            session={session}
+            onOpen={() => openWhiteboard(roomBoard.zoneId)}
+          />
+        </Suspense>
       )}
       {panel && (
         <aside className="side-panel glass">
@@ -308,6 +390,16 @@ function Office({ info }: { info: SessionInfo }) {
         <span className="bottom-caption">A shared space, at your own pace.</span>
       </footer>
       {profile && <ProfileDialog user={view.user} onClose={() => setProfile(false)} />}
+      {whiteboardOpen && roomBoard && (
+        <Suspense fallback={<div className="whiteboard-loading glass">Opening whiteboard…</div>}>
+          <WhiteboardDialog
+            board={roomBoard}
+            session={session}
+            roomName={zoneName(whiteboardOpen)}
+            onClose={closeWhiteboard}
+          />
+        </Suspense>
+      )}
     </main>
   );
 }

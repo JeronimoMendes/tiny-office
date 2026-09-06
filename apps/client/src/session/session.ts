@@ -8,6 +8,9 @@ import {
   type Player,
   type ServerMessage,
   type SessionInfo,
+  type WhiteboardChanges,
+  type WhiteboardPresence,
+  type WhiteboardState,
 } from '@office/shared';
 import type { RendererBridge, RenderSnapshot } from './bridge';
 import { LocalMotion } from './local-motion';
@@ -16,6 +19,7 @@ export type SessionView = SessionInfo & {
   connection: 'connecting' | 'online' | 'reconnecting' | 'closed';
   connectionMessage: string;
   players: Player[];
+  whiteboard: WhiteboardState | null;
 };
 
 export class OfficeSession {
@@ -56,6 +60,7 @@ export class OfficeSession {
       connection: 'connecting',
       connectionMessage: 'Connecting to the office…',
       players: [],
+      whiteboard: null,
     };
     this.map = parseMap(info.workspace.map);
   }
@@ -111,6 +116,7 @@ export class OfficeSession {
       this.localMotion = null;
       this.lastRender = null;
       this.heading = null;
+      this.update({ whiteboard: null });
       if ([4001, 4002, 4003].includes(event.code)) {
         this.update({
           connection: 'closed',
@@ -124,6 +130,21 @@ export class OfficeSession {
       });
       this.reconnect = setTimeout(() => this.connect(), Math.min(1000 * 2 ** this.retry++, 10000));
     };
+  }
+  openWhiteboard(zoneId: string) {
+    this.send({ type: 'whiteboard-open', zoneId });
+  }
+  updateWhiteboard(zoneId: string, changes: WhiteboardChanges) {
+    this.send({ type: 'whiteboard-changes', zoneId, changes });
+  }
+  updateWhiteboardPresence(zoneId: string, presence: WhiteboardPresence) {
+    this.send({ type: 'whiteboard-presence', zoneId, presence });
+  }
+  closeWhiteboard(zoneId: string) {
+    this.send({ type: 'whiteboard-close', zoneId });
+  }
+  private send(message: object) {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
   }
   private receive(message: ServerMessage) {
     if (message.type === 'welcome') {
@@ -147,6 +168,7 @@ export class OfficeSession {
         user: message.members.find((m) => m.id === message.selfId)!,
         connection: 'online',
         connectionMessage: 'Connected',
+        whiteboard: null,
       });
       this.publishRender();
       return;
@@ -158,6 +180,39 @@ export class OfficeSession {
         workspace: { ...this.view.workspace, desks: message.desks },
       });
       this.publishRender();
+      return;
+    }
+    if (message.type === 'whiteboard-state') {
+      this.update({ whiteboard: message.board });
+      return;
+    }
+    if (message.type === 'whiteboard-changes') {
+      if (this.view.whiteboard?.zoneId !== message.zoneId) return;
+      const records = new Map(this.view.whiteboard.records.map((record) => [record.id, record]));
+      for (const record of message.changes.put) records.set(record.id, record);
+      for (const id of message.changes.remove) records.delete(id);
+      this.update({ whiteboard: { ...this.view.whiteboard, records: [...records.values()] } });
+      return;
+    }
+    if (message.type === 'whiteboard-editors') {
+      if (this.view.whiteboard?.zoneId === message.zoneId)
+        this.update({ whiteboard: { ...this.view.whiteboard, editorIds: message.editorIds } });
+      return;
+    }
+    if (message.type === 'whiteboard-presence') {
+      if (this.view.whiteboard?.zoneId !== message.zoneId) return;
+      const presences = new Map(
+        this.view.whiteboard.presences.map((presence) => [presence.userId, presence]),
+      );
+      if (message.presence) presences.set(message.presence.userId, message.presence);
+      else presences.delete(`user:${message.userId}`);
+      this.update({
+        whiteboard: { ...this.view.whiteboard, presences: [...presences.values()] },
+      });
+      return;
+    }
+    if (message.type === 'whiteboard-ended') {
+      if (this.view.whiteboard?.zoneId === message.zoneId) this.update({ whiteboard: null });
       return;
     }
     if (message.type === 'error') {
@@ -196,7 +251,7 @@ export class OfficeSession {
       heading: document.hidden ? null : this.heading,
     };
     this.pending.push(input);
-    this.socket.send(JSON.stringify(input));
+    this.send(input);
     this.predicted = { ...this.predicted, ...move(this.map, this.predicted, input.heading) };
     this.localMotion?.commit(this.predicted, performance.now());
   }

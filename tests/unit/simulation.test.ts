@@ -238,3 +238,71 @@ describe('movement authority', () => {
     });
   });
 });
+
+describe('meeting whiteboards', () => {
+  it('starts near the board, synchronizes room editors, and ends with the last editor', () => {
+    const room = map.zones.find((zone) => zone.id === 'cedar')!;
+    const bob: SavedMember = {
+      ...member,
+      id: '00000000-0000-4000-8000-000000000003',
+      email: 'b@example.test',
+      displayName: 'Bob',
+      x: room.x + 48,
+      y: room.y + room.height - 160,
+    };
+    const alice = {
+      ...member,
+      x: room.x + room.width / 2,
+      y: room.y + 30,
+    };
+    const world = new World(workspace, [alice, bob], { savePositions: vi.fn() });
+    const aliceMessages: ServerMessage[] = [];
+    const bobMessages: ServerMessage[] = [];
+    const alicePeer: Peer = { send: (message) => aliceMessages.push(message), close: vi.fn() };
+    const bobPeer: Peer = { send: (message) => bobMessages.push(message), close: vi.fn() };
+    world.attach(alice.id, alicePeer, Date.now() + 100_000, 'alice');
+    world.attach(bob.id, bobPeer, Date.now() + 100_000, 'bob');
+
+    world.openWhiteboard(alice.id, alicePeer, room.id);
+    expect(bobMessages.at(-1)).toMatchObject({
+      type: 'whiteboard-state',
+      board: { zoneId: room.id, editorIds: [alice.id] },
+    });
+
+    world.updateWhiteboard(alice.id, alicePeer, room.id, {
+      put: [{ id: 'shape:one', typeName: 'shape' }],
+      remove: [],
+    });
+    expect(bobMessages.at(-1)).toMatchObject({
+      type: 'whiteboard-changes',
+      changes: { put: [{ id: 'shape:one' }] },
+    });
+
+    // Once live, anybody in the meeting room can join from the preview.
+    world.openWhiteboard(bob.id, bobPeer, room.id);
+    expect(aliceMessages.at(-1)).toMatchObject({
+      type: 'whiteboard-state',
+      board: { editorIds: [alice.id, bob.id], records: [{ id: 'shape:one' }] },
+    });
+    world.updateWhiteboardPresence(bob.id, bobPeer, room.id, {
+      id: `instance_presence:${bob.id}`,
+      typeName: 'instance_presence',
+      userId: `user:${bob.id}`,
+      cursor: { x: 120, y: 80 },
+      userName: 'Bob',
+    });
+    expect(aliceMessages.at(-1)).toMatchObject({
+      type: 'whiteboard-presence',
+      userId: bob.id,
+      presence: { userName: 'Bob', cursor: { x: 120, y: 80 } },
+    });
+
+    world.closeWhiteboard(alice.id, alicePeer, room.id);
+    expect(bobMessages.at(-1)).toMatchObject({
+      type: 'whiteboard-editors',
+      editorIds: [bob.id],
+    });
+    world.closeWhiteboard(bob.id, bobPeer, room.id);
+    expect(aliceMessages.at(-1)).toEqual({ type: 'whiteboard-ended', zoneId: room.id });
+  });
+});

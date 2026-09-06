@@ -11,7 +11,11 @@ export function websocketTransport(
   world: World,
   origin: string,
 ) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: 1024 * 1024,
+    perMessageDeflate: false,
+  });
   app.server.on('upgrade', (req, socket, head) => {
     void (async () => {
       socket.on('error', () => {});
@@ -52,8 +56,20 @@ export function websocketTransport(
         }, 15000);
         ws.on('message', (data) => {
           try {
-            const input = clientMessageSchema.parse(JSON.parse(data.toString()));
-            world.input(session.userId, peer, input);
+            const message = clientMessageSchema.parse(JSON.parse(data.toString()));
+            if (message.type === 'input') world.input(session.userId, peer, message);
+            else if (message.type === 'whiteboard-open')
+              world.openWhiteboard(session.userId, peer, message.zoneId);
+            else if (message.type === 'whiteboard-changes')
+              world.updateWhiteboard(session.userId, peer, message.zoneId, message.changes);
+            else if (message.type === 'whiteboard-presence')
+              world.updateWhiteboardPresence(
+                session.userId,
+                peer,
+                message.zoneId,
+                message.presence,
+              );
+            else world.closeWhiteboard(session.userId, peer, message.zoneId);
           } catch {
             ws.close(4002, 'Invalid message');
             world.detach(session.userId, peer);

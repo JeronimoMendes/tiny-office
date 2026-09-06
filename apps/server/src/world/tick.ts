@@ -7,6 +7,9 @@ import {
   type Input,
   type Player,
   type ServerMessage,
+  type WhiteboardChanges,
+  type WhiteboardPresence,
+  type WhiteboardRecord,
   type Workspace,
 } from '@office/shared';
 import type { SavedMember, Store } from '../persistence/store';
@@ -16,6 +19,12 @@ export interface Peer {
   send(message: ServerMessage): void;
   close(code: number, reason: string): void;
 }
+type Whiteboard = {
+  records: Map<string, WhiteboardRecord>;
+  presences: Map<string, WhiteboardPresence>;
+  editors: Set<string>;
+};
+
 type Connection = {
   peer: Peer;
   player: Player;
@@ -34,6 +43,7 @@ export class World {
   private removed = new Set<string>();
   private writer: PositionWriter;
   private mediaPolicyChanged: (() => void) | null = null;
+  private whiteboards = new Map<string, Whiteboard>();
   tickNumber = 0;
 
   constructor(
@@ -98,6 +108,7 @@ export class World {
       members: [...this.members.values()].map(({ x, y, ...m }) => m),
       workspace: this.workspace,
     });
+    if (player.zoneId) this.sendWhiteboardState(peer, player.zoneId);
   }
   input(userId: string, peer: Peer, input: Input) {
     const c = this.connections.get(userId);
@@ -110,10 +121,130 @@ export class World {
     c.receivedSeq = input.seq;
     c.inputs.push(input);
   }
+  openWhiteboard(userId: string, peer: Peer, zoneId: string) {
+    const c = this.connections.get(userId);
+    const zone = this.map.zones.find((candidate) => candidate.id === zoneId);
+    const boardIsActive = this.whiteboards.has(zoneId);
+    const nearBoard =
+      c && zone && Math.hypot(c.player.x - (zone.x + zone.width / 2), c.player.y - zone.y) < 105;
+    if (
+      !c ||
+      c.peer !== peer ||
+      c.player.zoneId !== zoneId ||
+      zone?.kind !== 'meeting' ||
+      (!boardIsActive && !nearBoard)
+    ) {
+      peer.send({
+        type: 'error',
+        code: 'whiteboard-unavailable',
+        message: 'Move closer to the meeting room whiteboard.',
+      });
+      return;
+    }
+    let board = this.whiteboards.get(zoneId);
+    if (!board) {
+      board = { records: new Map(), presences: new Map(), editors: new Set() };
+      this.whiteboards.set(zoneId, board);
+    }
+    board.editors.add(userId);
+    this.broadcastWhiteboard(zoneId, {
+      type: 'whiteboard-state',
+      board: {
+        zoneId,
+        records: [...board.records.values()],
+        presences: [...board.presences.values()],
+        editorIds: [...board.editors],
+      },
+    });
+  }
+  updateWhiteboard(userId: string, peer: Peer, zoneId: string, changes: WhiteboardChanges) {
+    const c = this.connections.get(userId);
+    const board = this.whiteboards.get(zoneId);
+    if (!c || c.peer !== peer || c.player.zoneId !== zoneId || !board?.editors.has(userId)) return;
+    for (const record of changes.put) board.records.set(record.id, record);
+    for (const id of changes.remove) board.records.delete(id);
+    if (board.records.size > 10_000) {
+      peer.close(4002, 'Whiteboard is too large');
+      this.detach(userId, peer);
+      return;
+    }
+    this.broadcastWhiteboard(zoneId, { type: 'whiteboard-changes', zoneId, changes }, userId);
+  }
+  updateWhiteboardPresence(
+    userId: string,
+    peer: Peer,
+    zoneId: string,
+    presence: WhiteboardPresence,
+  ) {
+    const c = this.connections.get(userId);
+    const board = this.whiteboards.get(zoneId);
+    if (
+      !c ||
+      c.peer !== peer ||
+      c.player.zoneId !== zoneId ||
+      !board?.editors.has(userId) ||
+      presence.userId !== `user:${userId}` ||
+      presence.id !== `instance_presence:${userId}`
+    )
+      return;
+    board.presences.set(userId, presence);
+    this.broadcastWhiteboard(
+      zoneId,
+      { type: 'whiteboard-presence', zoneId, userId, presence },
+      userId,
+    );
+  }
+  closeWhiteboard(userId: string, peer: Peer, zoneId: string) {
+    const c = this.connections.get(userId);
+    if (!c || c.peer !== peer) return;
+    this.leaveWhiteboard(userId, zoneId);
+  }
+  private leaveWhiteboard(userId: string, zoneId: string) {
+    const board = this.whiteboards.get(zoneId);
+    if (!board?.editors.delete(userId)) return;
+    if (board.presences.delete(userId))
+      this.broadcastWhiteboard(zoneId, {
+        type: 'whiteboard-presence',
+        zoneId,
+        userId,
+        presence: null,
+      });
+    if (!board.editors.size) {
+      this.whiteboards.delete(zoneId);
+      this.broadcastWhiteboard(zoneId, { type: 'whiteboard-ended', zoneId });
+      return;
+    }
+    this.broadcastWhiteboard(zoneId, {
+      type: 'whiteboard-editors',
+      zoneId,
+      editorIds: [...board.editors],
+    });
+  }
+  private sendWhiteboardState(peer: Peer, zoneId: string) {
+    const board = this.whiteboards.get(zoneId);
+    if (!board) {
+      peer.send({ type: 'whiteboard-ended', zoneId });
+      return;
+    }
+    peer.send({
+      type: 'whiteboard-state',
+      board: {
+        zoneId,
+        records: [...board.records.values()],
+        presences: [...board.presences.values()],
+        editorIds: [...board.editors],
+      },
+    });
+  }
+  private broadcastWhiteboard(zoneId: string, message: ServerMessage, exceptId?: string) {
+    for (const [id, c] of this.connections)
+      if (id !== exceptId && c.player.zoneId === zoneId) c.peer.send(message);
+  }
   detach(userId: string, peer: Peer) {
     const c = this.connections.get(userId);
     if (!c || c.peer !== peer) return;
     this.writer.mark(c.player);
+    if (c.player.zoneId) this.leaveWhiteboard(userId, c.player.zoneId);
     this.connections.delete(userId);
     this.changed.delete(userId);
     this.removed.add(userId);
@@ -176,8 +307,13 @@ export class World {
         motion.moving !== previous.moving ||
         zoneId !== previous.zoneId
       ) {
+        if (zoneId !== previous.zoneId && previous.zoneId)
+          this.leaveWhiteboard(id, previous.zoneId);
         c.player = { ...previous, ...motion, zoneId };
-        if (zoneId !== previous.zoneId) this.mediaPolicyChanged?.();
+        if (zoneId !== previous.zoneId) {
+          this.mediaPolicyChanged?.();
+          if (zoneId) this.sendWhiteboardState(c.peer, zoneId);
+        }
         this.changed.add(id);
         const member = this.members.get(id)!;
         member.x = motion.x;

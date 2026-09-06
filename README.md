@@ -20,6 +20,7 @@ Open **http://localhost:3000**. The app prints a **bootstrap secret** in its sta
 3. Send that link privately to that person. It works **once** and expires after **24 hours**.
 4. Assign their desk with the desk dropdowns. Each person can own one desk; anyone may enter it.
 5. Use **WASD / arrow keys** to walk. Click your name in the bottom bar to edit your name and character. Mix head shapes, full-body skin tones, hairstyles, shirts, pants and shoes, with independent hair/clothing colors and a four-direction preview; save to update your character for everyone. Collapse the people panel for more map space.
+6. Walk to the whiteboard at the top of a meeting room and press **Space** to start a shared tldraw canvas. Everyone in that room sees a live preview and can click it to draw with you. The board lasts until its final editor closes it or leaves the room.
 
 One active game connection per person/workspace. Opening another tab replaces the previous connection instead of creating a duplicate avatar. Separate people should use separate browser profiles, private windows or devices.
 
