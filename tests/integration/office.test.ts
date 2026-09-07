@@ -673,22 +673,16 @@ it('scopes media credentials to the authoritative zone and revokes them from the
     sfu.join(desk, alice.id, inZone);
     sfu.join(desk, bob.id, inZone);
 
-    // Focus keeps the conversation but loses incoming media and video, so the
-    // SFU permission it already holds is revoked by disconnection.
+    // Focus stays in the conversation with full receive and optional publish
+    // permissions. The client, rather than a weaker credential, defaults its
+    // local microphone and camera to off.
     await status(bob, 'focus');
-    await until(() => !sfu.present(desk, bob.id), 'Focus did not revoke SFU access');
     const focused = await token(bob);
     expect(grant(focused.token)).toMatchObject({
       room: desk,
       canPublish: true,
-      canSubscribe: false,
-      canPublishSources: ['microphone'],
-    });
-    sfu.join(desk, bob.id, {
-      canPublish: true,
-      canSubscribe: false,
-      canPublishData: false,
-      canPublishSources: [TrackSource.MICROPHONE],
+      canSubscribe: true,
+      canPublishSources: ['microphone', 'camera'],
     });
 
     // DND is excluded from media entirely: removed from the room and refused a
@@ -708,12 +702,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
     );
     await until(() => !sfu.present(desk, alice.id), 'Leaving the zone did not revoke SFU access');
     expect(await token(alice)).toMatchObject({ enabled: false });
-    expect(sfu.removed.map((entry) => entry.identity)).toEqual([
-      alice.id,
-      bob.id,
-      bob.id,
-      alice.id,
-    ]);
+    expect(sfu.removed.map((entry) => entry.identity)).toEqual([alice.id, bob.id, alice.id]);
   } finally {
     for (const socket of sockets) socket.close();
     await media.app.close();

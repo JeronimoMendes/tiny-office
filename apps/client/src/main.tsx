@@ -516,6 +516,12 @@ function Office({ info }: { info: SessionInfo }) {
               status={view.user.status}
               connected={view.connection === 'online'}
               displayName={view.user.displayName}
+              hasPeerInZone={Boolean(
+                self?.zoneId &&
+                view.players.some(
+                  (player) => player.id !== view.user.id && player.zoneId === self.zoneId,
+                ),
+              )}
             />
           </Suspense>
           <span className="control-divider" />

@@ -116,16 +116,15 @@ describe('LiveKit authoritative reconciliation', () => {
     expect(service.removed).toContainEqual({ room: zoneRoom('cedar'), identity: 'alice' });
   });
 
-  it('disconnects a downgraded participant rather than leaving permissions behind', async () => {
+  it('keeps focus permissions and disconnects DND participants', async () => {
     const { service, media, zone, status } = setup();
     zone('alice', 'cedar');
     zone('bob', 'cedar');
     service.rooms.set(zoneRoom('cedar'), [participant('alice', true), participant('bob', true)]);
 
-    // Focus keeps the conversation but may no longer receive or use video.
     status('alice', 'focus');
     await media.reconcile();
-    expect(service.removed).toEqual([{ room: zoneRoom('cedar'), identity: 'alice' }]);
+    expect(service.removed).toEqual([]);
 
     // DND is excluded from the room entirely.
     status('bob', 'do-not-disturb');
@@ -133,23 +132,19 @@ describe('LiveKit authoritative reconciliation', () => {
     expect(service.removed).toContainEqual({ room: zoneRoom('cedar'), identity: 'bob' });
   });
 
-  it('grants a focused participant microphone-only permissions in place', async () => {
+  it('grants a focused participant full permissions in place', async () => {
     const { service, media, zone } = setup(['focus', 'free', 'free']);
     zone('alice', 'cedar');
-    service.rooms.set(zoneRoom('cedar'), [
-      participant('alice', false, [TrackSource.MICROPHONE]),
-      participant('bob', false, [TrackSource.MICROPHONE]),
-    ]);
-    zone('bob', 'cedar');
+    service.rooms.set(zoneRoom('cedar'), [participant('alice', false, [TrackSource.MICROPHONE])]);
     await media.reconcile();
 
     expect(service.removed).toEqual([]);
     expect(service.updated).toEqual([
       {
         room: zoneRoom('cedar'),
-        identity: 'bob',
+        identity: 'alice',
         options: {
-          name: 'bob',
+          name: 'alice',
           permission: {
             canSubscribe: true,
             canPublish: true,

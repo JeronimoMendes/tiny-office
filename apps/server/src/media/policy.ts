@@ -21,8 +21,8 @@ export function mediaPolicy(player: Pick<Player, 'zoneId' | 'status'>): MediaPol
     return {
       eligible: true,
       canPublishMicrophone: true,
-      canPublishCamera: false,
-      canReceive: false,
+      canPublishCamera: true,
+      canReceive: true,
     };
   return {
     eligible: true,

@@ -67,10 +67,10 @@ Confirmed by the user:
 1. **Your current zone determines your conversation.** Server-computed zone membership selects at most one active conversation group, which may contain many people. Changing zones leaves the previous conversation; conversations never overlap for a person.
 2. **No remote desk-owner summoning.** Desk occupants share that zone's conversation. The owner participates only while physically inside the same zone; an absent or offline owner is not connected. Desk ownership does not override zone membership.
 3. **Strictly zone-based audio.** Everyone in a meeting room shares its conversation regardless of distance. Open floor is silent, with no proximity chat.
-4. **Focus permits explicit microphone unmuting without switching to free.** Focus joins the zone conversation muted by default, suppresses incoming audio, and disables video. Manual unmuting does not enable incoming audio or video.
+4. **Focus receives the conversation without publishing by default.** Focus joins the zone conversation and receives its audio and video, but the local microphone and camera start off. Either may be enabled explicitly without switching status.
 5. **DND excludes all media.** A DND user publishes and receives nothing, gets no SFU credential/connection, and negotiates no media stream. Entering DND forcibly removes existing media access. The avatar and status indicator remain visible.
 
-These rules must be enforced by the server and SFU, not just by UI controls. Phase 2 must test conversation isolation, zone transitions, focus overrides, DND exclusion and permission revocation.
+DND and zone isolation must be enforced by the server and SFU, not just by UI controls. Focus and available publication defaults are client behavior because users must be able to enable and disable their own devices. Phase 2 must test conversation isolation, zone transitions, focus defaults, DND exclusion and permission revocation.
 
 ## Phase 1 working decisions
 

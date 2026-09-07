@@ -12,6 +12,11 @@ import {
 } from 'livekit-client';
 import type { Status } from '@office/shared';
 import { api } from '../session/session';
+import {
+  AVAILABLE_MEDIA_IDLE_MS,
+  shouldPauseAvailableMedia,
+  shouldResumeAvailableMedia,
+} from './media-presence';
 
 /** Names every camera so a face in the strip maps to a person in the room. */
 function tile(video: HTMLMediaElement, name: string) {
@@ -51,26 +56,40 @@ export function MediaControls({
   status,
   connected,
   displayName,
+  hasPeerInZone,
 }: {
   zoneId: string | null;
   status: Status;
   connected: boolean;
   displayName: string;
+  hasPeerInZone: boolean;
 }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [mic, setMic] = useState(false);
   const [camera, setCamera] = useState(false);
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [pageVisible, setPageVisible] = useState(() => !document.hidden);
+  const [idlePaused, setIdlePaused] = useState(false);
   const media = useRef<HTMLDivElement>(null);
+  const roomRef = useRef<Room | null>(null);
   const published = useRef(new Map<Track.Source, LocalTrack>());
+  const pending = useRef(new Set<Track.Source>());
+
+  useEffect(() => {
+    const visibilityChanged = () => setPageVisible(!document.hidden);
+    document.addEventListener('visibilitychange', visibilityChanged);
+    return () => document.removeEventListener('visibilitychange', visibilityChanged);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const next = new Room({ adaptiveStream: true, dynacast: true });
+    roomRef.current = null;
     setRoom(null);
     setMic(false);
     setCamera(false);
+    setIdlePaused(false);
     if (!connected || !zoneId || status === 'do-not-disturb') {
       setMessage(
         !connected
@@ -116,6 +135,7 @@ export function MediaControls({
     // rather than sitting silently outside a conversation we still belong to.
     next.on(RoomEvent.Disconnected, () => {
       if (cancelled) return;
+      roomRef.current = null;
       setRoom(null);
       setMessage('Reconnecting media…');
       setTimeout(() => !cancelled && setAttempt((value) => value + 1), 750);
@@ -127,19 +147,20 @@ export function MediaControls({
           setMessage(result.reason);
           return;
         }
-        // Subscriptions follow the room-scoped credential: LiveKit delivers
-        // only this zone's tracks, and nothing at all without canSubscribe.
         await next.connect(result.url, result.token);
         if (cancelled) return void next.disconnect();
+        roomRef.current = next;
         setRoom(next);
-        setMessage(status === 'focus' ? 'Focused · incoming media off' : 'In zone conversation');
+        setMessage(status === 'focus' ? 'Focused · mic and video off' : 'In zone conversation');
       })
       .catch((error) => {
         if (!cancelled) setMessage((error as Error).message);
       });
     return () => {
       cancelled = true;
+      if (roomRef.current === next) roomRef.current = null;
       published.current.clear();
+      pending.current.clear();
       next.removeAllListeners();
       void next.disconnect();
       if (media.current) media.current.replaceChildren();
@@ -151,54 +172,83 @@ export function MediaControls({
     if (label) label.textContent = `${displayName} (you)`;
   }, [displayName]);
 
-  // Muting a published track leaves it subscribed, so peers keep a dead tile and
-  // the next publish adds a second one. Stopping means unpublishing.
-  async function unpublish(source: Track.Source) {
-    const track = published.current.get(source);
-    if (!track) return;
-    published.current.delete(source);
-    await room?.localParticipant.unpublishTrack(track, true);
-  }
-  async function publish(source: Track.Source, track: LocalTrack) {
-    await room!.localParticipant.publishTrack(track, { source });
-    published.current.set(source, track);
-  }
-
-  async function toggleMic() {
-    if (!room) return;
+  async function setMicrophone(enabled: boolean) {
+    const source = Track.Source.Microphone;
+    const activeRoom = roomRef.current;
+    if (!activeRoom || pending.current.has(source) || published.current.has(source) === enabled)
+      return;
+    pending.current.add(source);
     try {
-      if (mic) {
-        await unpublish(Track.Source.Microphone);
-        setMic(false);
+      if (enabled) {
+        const track = await createLocalAudioTrack();
+        if (roomRef.current !== activeRoom) return void track.stop();
+        await activeRoom.localParticipant.publishTrack(track, { source });
+        published.current.set(source, track);
       } else {
-        await publish(Track.Source.Microphone, await createLocalAudioTrack());
-        setMic(true);
+        const track = published.current.get(source)!;
+        published.current.delete(source);
+        await activeRoom.localParticipant.unpublishTrack(track, true);
       }
+      if (roomRef.current === activeRoom) setMic(enabled);
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      pending.current.delete(source);
     }
   }
-  async function toggleCamera() {
-    if (!room || status !== 'free') return;
+
+  async function setVideo(enabled: boolean) {
+    const source = Track.Source.Camera;
+    const activeRoom = roomRef.current;
+    if (!activeRoom || pending.current.has(source) || published.current.has(source) === enabled)
+      return;
+    pending.current.add(source);
     try {
-      if (camera) {
-        await unpublish(Track.Source.Camera);
-        media.current?.querySelectorAll('[data-local]').forEach((element) => element.remove());
-        setCamera(false);
-      } else {
+      if (enabled) {
         const track = await createLocalVideoTrack();
-        await publish(Track.Source.Camera, track);
+        if (roomRef.current !== activeRoom) return void track.stop();
+        await activeRoom.localParticipant.publishTrack(track, { source });
+        published.current.set(source, track);
         const element = track.attach();
         element.muted = true;
         const node = tile(element, `${displayName} (you)`);
         node.dataset.local = 'true';
         media.current?.append(node);
-        setCamera(true);
+      } else {
+        const track = published.current.get(source)!;
+        published.current.delete(source);
+        await activeRoom.localParticipant.unpublishTrack(track, true);
+        media.current?.querySelectorAll('[data-local]').forEach((element) => element.remove());
       }
+      if (roomRef.current === activeRoom) setCamera(enabled);
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      pending.current.delete(source);
     }
   }
+
+  // Available people automatically open both tracks when somebody joins their
+  // zone. Focused people receive the conversation but choose when to publish.
+  useEffect(() => {
+    if (!room || !shouldResumeAvailableMedia(status, pageVisible, hasPeerInZone, idlePaused))
+      return;
+    setIdlePaused(false);
+    void setMicrophone(true);
+    void setVideo(true);
+  }, [room, status, hasPeerInZone, pageVisible, idlePaused]);
+
+  // An available person who leaves an empty zone open in a background tab gets
+  // a short grace period. A peer joining, or returning to the tab, resumes both.
+  useEffect(() => {
+    if (!room || !shouldPauseAvailableMedia(status, pageVisible, hasPeerInZone)) return;
+    const timer = window.setTimeout(() => {
+      setIdlePaused(true);
+      void setMicrophone(false);
+      void setVideo(false);
+    }, AVAILABLE_MEDIA_IDLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [room, status, hasPeerInZone, pageVisible]);
 
   return (
     <div className="media-controls">
@@ -209,23 +259,17 @@ export function MediaControls({
         aria-label={mic ? 'Mute' : 'Mic'}
         aria-pressed={mic}
         title={mic ? 'Turn off microphone' : 'Turn on microphone'}
-        onClick={() => void toggleMic()}
+        onClick={() => void setMicrophone(!mic)}
       >
         <MicrophoneIcon enabled={mic} />
       </button>
       <button
         className="media-toggle"
-        disabled={!room || status !== 'free'}
+        disabled={!room}
         aria-label={camera ? 'Stop video' : 'Video'}
         aria-pressed={camera}
-        title={
-          status === 'focus'
-            ? 'Video is disabled while focused'
-            : camera
-              ? 'Turn off video'
-              : 'Turn on video'
-        }
-        onClick={() => void toggleCamera()}
+        title={camera ? 'Turn off video' : 'Turn on video'}
+        onClick={() => void setVideo(!camera)}
       >
         <ScreenIcon enabled={camera} />
       </button>
