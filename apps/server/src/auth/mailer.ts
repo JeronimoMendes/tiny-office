@@ -15,15 +15,22 @@ export const noMailer: Mailer = {
   },
 };
 
+// Everything up to the last "@" is the password, and a query string can carry
+// one too. Masking both leaves the scheme, host and port, which is the part an
+// operator needs to see to spot a typo.
+export const redactSmtpUrl = (url: string) =>
+  url.replace(/\/\/.*@/, '//***@').replace(/\?.*$/, '?***');
+
 // SMTP_URL carries host, port, credentials and TLS choice, e.g.
 // smtps://user:pass@smtp.example.com:465. Percent-encode the credentials.
 // A malformed one leaves email sign-in off rather than taking the office down
-// with it, and is never echoed back: it carries the SMTP password.
+// with it, and is only ever quoted back redacted.
 export function createMailer(
   env: NodeJS.ProcessEnv = process.env,
   onError: (message: string) => void = console.error,
 ): Mailer {
-  const url = env.SMTP_URL,
+  // Copy-pasting a value out of a dashboard tends to bring quotes and spaces.
+  const url = env.SMTP_URL?.trim().replace(/^(['"])(.*)\1$/, '$2'),
     from = env.MAIL_FROM;
   if (!url || !from) return noMailer;
   let transport;
@@ -35,7 +42,7 @@ export function createMailer(
     transport = createTransport(url);
   } catch (error) {
     onError(
-      `SMTP_URL is unusable (${(error as Error).message}), so email sign-in stays off. Expected smtp://user:pass@host:587 or smtps://user:pass@host:465, credentials percent-encoded.`,
+      `SMTP_URL is unusable (${(error as Error).message}), so email sign-in stays off. It reads ${redactSmtpUrl(url)} with the password masked; expected smtp://user:pass@host:587 or smtps://user:pass@host:465, credentials percent-encoded.`,
     );
     return noMailer;
   }
