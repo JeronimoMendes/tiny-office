@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { Store, DEFAULT_WORKSPACE_ID } from './persistence/store';
 import { newSecret } from './auth/secrets';
+import { createMailer } from './auth/mailer';
 import { createApp } from './app';
 
 const pool = new Pool({
@@ -36,6 +37,11 @@ if (!(await pool.query('SELECT 1 FROM workspaces WHERE id=$1', [workspaceId])).r
     JSON.parse(await readFile(process.env.MAP_FILE ?? 'maps/office.tmj', 'utf8')),
   );
 }
+const mailer = createMailer();
+if (!mailer.enabled)
+  console.log(
+    'Email sign-in is off (set SMTP_URL and MAIL_FROM). Members who lose their session need a link from the owner, and the owner needs `npm run auth:owner-link`.',
+  );
 const bootstrapSecret = process.env.BOOTSTRAP_SECRET || newSecret();
 if (!(await store.hasOwner(workspaceId)))
   console.log(`\nClaim your workspace at ${origin}\nBootstrap secret: ${bootstrapSecret}\n`);
@@ -43,6 +49,7 @@ const { app } = await createApp(store, {
   workspaceId,
   origin,
   bootstrapSecret,
+  mailer,
   livekit: {
     apiUrl: process.env.LIVEKIT_URL,
     wsUrl: process.env.LIVEKIT_WS_URL,

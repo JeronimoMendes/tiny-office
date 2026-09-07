@@ -117,6 +117,13 @@ form .primary {
   border-radius: 8px;
   padding: 12px;
 }
+.notice {
+  color: #dbe9cf;
+  background: #3d4c39;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 18px;
+}
 .office-shell {
   height: 100dvh;
   overflow: hidden;

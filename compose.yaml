@@ -39,6 +39,8 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
       BOOTSTRAP_SECRET: ${BOOTSTRAP_SECRET:-}
       WORKSPACE_ID: ${WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
       MAP_FILE: ${MAP_FILE:-maps/office.tmj}
       LIVEKIT_URL: http://livekit:7880
       LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:-ws://localhost:7880}

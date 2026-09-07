@@ -10,6 +10,7 @@ import { World } from './world/tick';
 import { httpRoutes } from './transport/http';
 import { websocketTransport } from './transport/websocket';
 import { LiveKitMedia, type MediaRoomService } from './media/livekit';
+import { createMailer, type Mailer } from './auth/mailer';
 
 export async function createApp(
   store: Store,
@@ -20,6 +21,7 @@ export async function createApp(
     logger?: boolean;
     livekit?: { apiUrl?: string; wsUrl?: string; apiKey?: string; apiSecret?: string };
     mediaService?: MediaRoomService;
+    mailer?: Mailer;
   },
 ) {
   const app = Fastify({
@@ -37,7 +39,15 @@ export async function createApp(
   const media = new LiveKitMedia(world, options.livekit ?? {}, options.mediaService);
   world.setMediaPolicyChangeHandler(media.schedule);
   media.start();
-  httpRoutes(app, store, world, options.origin, options.bootstrapSecret, media);
+  httpRoutes(
+    app,
+    store,
+    world,
+    options.origin,
+    options.bootstrapSecret,
+    media,
+    options.mailer ?? createMailer(),
+  );
   const stopSockets = websocketTransport(app, store, world, options.origin);
   await app.register(fastifyStatic, {
     root: resolve('assets'),

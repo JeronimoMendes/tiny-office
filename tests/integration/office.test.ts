@@ -7,6 +7,7 @@ import { Store, DEFAULT_WORKSPACE_ID } from '../../apps/server/src/persistence/s
 import { createApp } from '../../apps/server/src/app';
 import { World } from '../../apps/server/src/world/tick';
 import type { MediaRoomService } from '../../apps/server/src/media/livekit';
+import type { Mail, Mailer } from '../../apps/server/src/auth/mailer';
 import {
   TrackSource,
   type ParticipantInfo,
@@ -28,6 +29,14 @@ const store = new Store(pool),
 const raw = JSON.parse(readFileSync('maps/office.tmj', 'utf8'));
 const origin = 'http://office.test';
 let office: Awaited<ReturnType<typeof createApp>>;
+const mailbox: Mail[] = [];
+const mailer: Mailer = {
+  enabled: true,
+  async send(mail) {
+    mailbox.push(mail);
+  },
+};
+const linkToken = (url: string) => new URLSearchParams(new URL(url).hash.slice(1)).get('login')!;
 let ownerCookie: string, ownerId: string;
 const cookieOf = (response: { headers: Record<string, unknown> }) =>
   String(response.headers['set-cookie']).split(';')[0];
@@ -42,6 +51,7 @@ beforeAll(async () => {
     origin,
     bootstrapSecret: 'bootstrap-test',
     logger: false,
+    mailer,
   });
   await office.app.listen({ port: 0, host: '127.0.0.1' });
 });
@@ -100,7 +110,9 @@ it('atomically redeems personal links once and enforces owner/member permissions
     headers: headers(),
     payload: { email: 'member@example.test', displayName: 'Member' },
   });
-  const token = new URLSearchParams(new URL(response.json().url).hash.slice(1)).get('login')!;
+  const token = linkToken(response.json().url);
+  expect(response.json().emailed).toBe(true);
+  expect(mailbox.at(-1)?.to).toBe('member@example.test');
   const results = await Promise.all([store.redeem(token), store.redeem(token)]);
   expect(results.filter(Boolean)).toHaveLength(1);
   const cookie = `office_session=${results.find(Boolean)}`;
@@ -131,6 +143,84 @@ it('atomically redeems personal links once and enforces owner/member permissions
   const expired = await store.invite(id, 'expired@example.test', 'Expired', raw);
   await pool.query("UPDATE login_tokens SET expires_at=now()-interval '1 second'");
   expect(await store.redeem(expired)).toBeNull();
+});
+
+it('emails a member their own sign-in link without revealing who is a member', async () => {
+  const signIn = (email: string) =>
+    office.app.inject({
+      method: 'POST',
+      url: '/api/sign-in',
+      headers: { origin },
+      payload: { email },
+    });
+  const emailedLink = (mail: Mail) =>
+    linkToken(mail.text.split('\n').find((line) => line.startsWith(origin))!);
+  const ageTokens = () =>
+    pool.query("UPDATE login_tokens SET created_at=now()-interval '5 minutes'");
+  await office.app.inject({
+    method: 'POST',
+    url: '/api/invites',
+    headers: headers(),
+    payload: { email: 'lost@example.test', displayName: 'Lost' },
+  });
+  await ageTokens();
+  mailbox.length = 0;
+
+  const stranger = await signIn('nobody@example.test');
+  expect(stranger.statusCode).toBe(200);
+  expect(stranger.json()).toEqual({ ok: true });
+  expect(mailbox).toHaveLength(0);
+
+  // Case-insensitive, so a member is not locked out by how they type their address.
+  expect((await signIn('LOST@example.test')).statusCode).toBe(200);
+  expect(mailbox).toHaveLength(1);
+  expect(mailbox[0].to).toBe('LOST@example.test');
+  expect(mailbox[0].subject).toContain(office.world.workspace.name);
+
+  // An immediate repeat cannot flood the inbox, and once the cooldown passes the
+  // extra link never retires the one already on its way to them.
+  const repeat = await signIn('lost@example.test');
+  expect(repeat.statusCode).toBe(200);
+  expect(repeat.json()).toEqual({ ok: true });
+  expect(mailbox).toHaveLength(1);
+  await ageTokens();
+  expect((await signIn('lost@example.test')).statusCode).toBe(200);
+  expect(mailbox).toHaveLength(2);
+
+  const login = await office.app.inject({
+    method: 'POST',
+    url: '/api/login',
+    headers: { origin },
+    payload: { token: emailedLink(mailbox[0]) },
+  });
+  expect(login.statusCode).toBe(200);
+  const session = await office.app.inject({
+    url: '/api/session',
+    headers: headers(cookieOf(login)),
+  });
+  expect(session.json().user.email).toBe('lost@example.test');
+});
+
+it('refuses self-service sign-in when email delivery is not configured', async () => {
+  const bare = await createApp(store, {
+    workspaceId: id,
+    origin,
+    bootstrapSecret: 'no-mail',
+    logger: false,
+  });
+  try {
+    expect((await bare.app.inject({ url: '/api/bootstrap' })).json().emailSignIn).toBe(false);
+    const response = await bare.app.inject({
+      method: 'POST',
+      url: '/api/sign-in',
+      headers: { origin },
+      payload: { email: 'lost@example.test' },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toContain('Ask the owner');
+  } finally {
+    await bare.app.close();
+  }
 });
 
 it('lets members claim an available desk only while standing in it', async () => {

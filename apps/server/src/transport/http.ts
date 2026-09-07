@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { canStand, inviteSchema, parseMap, profileSchema, statusSchema } from '@office/shared';
 import { equalSecret, hashSecret } from '../auth/secrets';
-import type { Store, Identity } from '../persistence/store';
+import { signInMail, type Mailer } from '../auth/mailer';
+import { LOGIN_TOKEN_HOURS, type Store, type Identity } from '../persistence/store';
 import type { World } from '../world/tick';
 import type { LiveKitMedia } from '../media/livekit';
 
@@ -13,7 +14,9 @@ export function httpRoutes(
   origin: string,
   bootstrapSecret: string,
   media: LiveKitMedia,
+  mailer: Mailer,
 ) {
+  const loginUrl = (token: string) => `${origin}/#login=${token}`;
   const cookieOptions = {
     httpOnly: true,
     sameSite: 'strict' as const,
@@ -51,6 +54,7 @@ export function httpRoutes(
   });
   app.get('/api/bootstrap', async () => ({
     required: !(await store.hasOwner(world.workspace.id)),
+    emailSignIn: mailer.enabled,
   }));
   app.post(
     '/api/bootstrap',
@@ -85,6 +89,32 @@ export function httpRoutes(
           error: 'This link is expired or has already been used. Ask the owner for a new one.',
         });
       return setSession(reply, session);
+    },
+  );
+  // Members recover on their own; the reply never reveals who is a member.
+  app.post(
+    '/api/sign-in',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const { email } = z
+        .object({ email: z.string().email().max(254) })
+        .strict()
+        .parse(req.body);
+      if (!mailer.enabled)
+        return reply
+          .code(503)
+          .send({ error: 'Email sign-in is not set up here. Ask the owner for a link.' });
+      const issued = await store.loginToken(world.workspace.id, email);
+      if (issued && issued !== 'throttled')
+        try {
+          await mailer.send({
+            to: email,
+            ...signInMail(world.workspace.name, loginUrl(issued.token), LOGIN_TOKEN_HOURS),
+          });
+        } catch (error) {
+          req.log.error(error, 'Sign-in email failed to send');
+        }
+      return { ok: true };
     },
   );
   app.post('/api/logout', async (req, reply) => {
@@ -151,7 +181,18 @@ export function httpRoutes(
     const { email, displayName } = inviteSchema.parse(req.body);
     const token = await store.invite(world.workspace.id, email, displayName, world.workspace.map);
     await refresh();
-    return { url: `${origin}/#login=${token}`, expiresInHours: 24 };
+    let emailed = false;
+    if (mailer.enabled)
+      try {
+        await mailer.send({
+          to: email,
+          ...signInMail(world.workspace.name, loginUrl(token), LOGIN_TOKEN_HOURS),
+        });
+        emailed = true;
+      } catch (error) {
+        req.log.error(error, 'Invite email failed to send');
+      }
+    return { url: loginUrl(token), expiresInHours: LOGIN_TOKEN_HOURS, emailed };
   });
   app.patch('/api/profile', async (req) => {
     const session = await identity(req),

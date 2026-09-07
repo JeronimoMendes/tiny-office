@@ -12,6 +12,7 @@ import { Avatar } from './Avatar';
 
 export function OwnerPanel({ view }: { view: SessionView }) {
   const [link, setLink] = useState(''),
+    [emailed, setEmailed] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [copied, setCopied] = useState(false);
@@ -24,14 +25,17 @@ export function OwnerPanel({ view }: { view: SessionView }) {
     setBusy(true);
     setError('');
     setLink('');
+    setEmailed('');
     setCopied(false);
     const data = new FormData(event.currentTarget);
     try {
-      const result = await api<{ url: string }>('/invites', {
-        email: data.get('email'),
+      const email = String(data.get('email'));
+      const result = await api<{ url: string; emailed: boolean }>('/invites', {
+        email,
         displayName: data.get('displayName'),
       });
       setLink(result.url);
+      if (result.emailed) setEmailed(email);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -56,6 +60,7 @@ export function OwnerPanel({ view }: { view: SessionView }) {
       </summary>
       <p>
         Share a personal, single-use link. Enter an existing email to issue a fresh sign-in link.
+        Members can also send themselves one from the sign-in screen.
       </p>
       <form onSubmit={invite}>
         <label>
@@ -81,7 +86,11 @@ export function OwnerPanel({ view }: { view: SessionView }) {
               onFocus={(e) => e.target.select()}
             />
           </label>
-          <small>Expires in 24 hours. Send only to this person.</small>
+          <small>
+            {emailed
+              ? `Sent to ${emailed}. Copy the link too if the email does not arrive.`
+              : 'Expires in 24 hours. Send only to this person.'}
+          </small>
           <button
             onClick={() =>
               void navigator.clipboard

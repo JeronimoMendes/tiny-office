@@ -24,6 +24,29 @@ export type Identity = {
 const memberColumns =
   'u.id, u.email, u.display_name AS "displayName", u.character, u.appearance, m.role, m.status, m.x, m.y';
 
+export const LOGIN_TOKEN_HOURS = 24;
+// An owner-issued invite is the one live link for that member and retires the
+// rest. A self-service link is additive: someone spamming the sign-in form must
+// not invalidate the link its owner is walking to their inbox to use.
+async function issueLoginToken(
+  db: PoolClient,
+  workspaceId: string,
+  userId: string,
+  token: string,
+  replace = true,
+) {
+  if (replace)
+    await db.query('DELETE FROM login_tokens WHERE workspace_id=$1 AND user_id=$2', [
+      workspaceId,
+      userId,
+    ]);
+  await db.query(
+    `INSERT INTO login_tokens(hash,workspace_id,user_id,expires_at)
+     VALUES($1,$2,$3,now()+interval '${LOGIN_TOKEN_HOURS} hours')`,
+    [hashSecret(token), workspaceId, userId],
+  );
+}
+
 export class Store {
   constructor(readonly pool: Pool) {}
   async transaction<T>(fn: (db: PoolClient) => Promise<T>): Promise<T> {
@@ -52,6 +75,12 @@ export class Store {
       if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 2')).rowCount) {
         await db.query('ALTER TABLE users ADD COLUMN appearance jsonb');
         await db.query('INSERT INTO schema_migrations VALUES (2)');
+      }
+      if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 3')).rowCount) {
+        await db.query(
+          'ALTER TABLE login_tokens ADD COLUMN created_at timestamptz NOT NULL DEFAULT now()',
+        );
+        await db.query('INSERT INTO schema_migrations VALUES (3)');
       }
     });
   }
@@ -174,16 +203,34 @@ export class Store {
         "INSERT INTO memberships(workspace_id,user_id,role,x,y) VALUES($1,$2,'member',$3,$4) ON CONFLICT DO NOTHING",
         [workspaceId, userId, spawn.x, spawn.y],
       );
-      await db.query('DELETE FROM login_tokens WHERE workspace_id=$1 AND user_id=$2', [
-        workspaceId,
-        userId,
-      ]);
-      await db.query(
-        "INSERT INTO login_tokens(hash,workspace_id,user_id,expires_at) VALUES($1,$2,$3,now()+interval '24 hours')",
-        [hashSecret(token), workspaceId, userId],
-      );
+      await issueLoginToken(db, workspaceId, userId, token);
     });
     return token;
+  }
+  // Self-service sign-in: only ever issues a link to an existing member, and at
+  // most one a minute so the form cannot be used to flood their inbox.
+  async loginToken(
+    workspaceId: string,
+    email: string,
+  ): Promise<{ token: string; displayName: string } | 'throttled' | null> {
+    return this.transaction(async (db) => {
+      const { rows } = await db.query(
+        `SELECT u.id, u.display_name AS "displayName" FROM users u
+         JOIN memberships m ON m.user_id=u.id AND m.workspace_id=$1
+         WHERE lower(u.email)=lower($2) ORDER BY u.email LIMIT 1`,
+        [workspaceId, email],
+      );
+      if (!rows[0]) return null;
+      const recent = await db.query(
+        `SELECT 1 FROM login_tokens WHERE workspace_id=$1 AND user_id=$2
+         AND consumed_at IS NULL AND expires_at>now() AND created_at>now()-interval '1 minute'`,
+        [workspaceId, rows[0].id],
+      );
+      if (recent.rowCount) return 'throttled';
+      const token = newSecret();
+      await issueLoginToken(db, workspaceId, rows[0].id, token, false);
+      return { token, displayName: rows[0].displayName };
+    });
   }
   private async createSession(db: PoolClient, workspaceId: string, userId: string) {
     const token = newSecret();

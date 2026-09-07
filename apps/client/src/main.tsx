@@ -33,18 +33,23 @@ const loginToken = new URLSearchParams(location.hash.slice(1)).get('login');
 if (loginToken) history.replaceState(null, '', location.pathname + location.search);
 const startup = (async () => {
   if (loginToken) await api('/login', { token: loginToken });
-  const bootstrap = await api<{ required: boolean }>('/bootstrap');
-  if (bootstrap.required) return { bootstrap: true, info: null };
+  const { required, emailSignIn } = await api<{ required: boolean; emailSignIn: boolean }>(
+    '/bootstrap',
+  );
+  if (required) return { bootstrap: true, emailSignIn, info: null };
   try {
-    return { bootstrap: false, info: await api<SessionInfo>('/session') };
+    return { bootstrap: false, emailSignIn, info: await api<SessionInfo>('/session') };
   } catch {
-    return { bootstrap: false, info: null };
+    return { bootstrap: false, emailSignIn, info: null };
   }
 })();
 
 function App() {
   const [info, setInfo] = useState<SessionInfo | null>(null);
   const [bootstrap, setBootstrap] = useState(false);
+  const [emailSignIn, setEmailSignIn] = useState(false);
+  const [sentTo, setSentTo] = useState('');
+  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -52,6 +57,7 @@ function App() {
       .then((result) => {
         setInfo(result.info);
         setBootstrap(result.bootstrap);
+        setEmailSignIn(result.emailSignIn);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -72,6 +78,21 @@ function App() {
       setError((e as Error).message);
     } finally {
       setLoading(false);
+    }
+  }
+  async function sendLink(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setSentTo('');
+    setBusy(true);
+    const email = String(new FormData(event.currentTarget).get('email'));
+    try {
+      await api('/sign-in', { email });
+      setSentTo(email);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
   if (info)
@@ -121,6 +142,28 @@ function App() {
                 Create my office
               </button>
             </form>
+          </>
+        ) : emailSignIn ? (
+          <>
+            <p>
+              Sign in with the email you were invited with. We’ll send you a link that opens the
+              office.
+            </p>
+            <form onSubmit={sendLink}>
+              <label>
+                Your email
+                <input name="email" type="email" required autoComplete="email" maxLength={254} />
+              </label>
+              <button className="primary" disabled={busy}>
+                {busy ? 'Sending…' : 'Email me a sign-in link'}
+              </button>
+            </form>
+            {sentTo && (
+              <p className="notice" role="status">
+                If {sentTo} belongs to this office, a sign-in link is on its way. It works once and
+                expires in 24 hours.
+              </p>
+            )}
           </>
         ) : (
           <p>

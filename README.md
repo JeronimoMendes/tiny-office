@@ -17,7 +17,7 @@ Open **http://localhost:3000**. The app prints a **bootstrap secret** in its sta
 
 1. Open **Manage office** in the participants panel.
 2. Enter a coworker's email and name and create a sign-in link.
-3. Send that link privately to that person. It works **once** and expires after **24 hours**.
+3. Send that link privately to that person. It works **once** and expires after **24 hours**. With `SMTP_URL` and `MAIL_FROM` set it is emailed for you, and anyone who loses their session can request a fresh one from the entry screen instead of asking you.
 4. Members can claim an available desk by walking into its highlighted zone and accepting the prompt. Their “Pick a desk” to-do disappears once they have one. The owner can still swap or clear any assignment with the desk dropdowns; each person can own one desk and anyone may enter it.
 5. Use **WASD / arrow keys** to walk. Click your name in the bottom bar to edit your name and character. Mix head shapes, full-body skin tones, hairstyles, shirts, pants and shoes, with independent hair/clothing colors and a four-direction preview; save to update your character for everyone. Collapse the people panel for more map space.
 6. Walk to the whiteboard at the top of a meeting room and press **Space** to start a shared tldraw canvas. Everyone in that room sees a live preview and can click it to draw with you. The board lasts until its final editor closes it or leaves the room.
@@ -26,9 +26,11 @@ One active game connection per person/workspace. Opening another tab replaces th
 
 ### Authentication model
 
-There is no reusable shared account link, email sending, password or OAuth dependency. The owner controls distribution of person-specific credentials. Possession of the link authenticates the recipient; **the supplied email is an identifier, not an independently verified email address**. Enter the same email in Manage office to reissue a login link; this invalidates earlier unused links. Existing signed-in sessions remain valid for 30 days. Link secrets live in the URL fragment, are removed immediately on arrival, are never sent as URL query parameters, and are stored only as hashes. Sessions use HttpOnly, SameSite=Strict cookies (Secure when APP_ORIGIN uses HTTPS).
+There is no reusable shared account link, password or OAuth dependency. Possession of the link authenticates the recipient; **the supplied email is an identifier, and is only a verified address when email delivery is configured**. Enter the same email in Manage office to reissue a login link; this invalidates earlier unused links. Existing signed-in sessions remain valid for 30 days.
 
-If the owner loses their session, an operator with access to Docker can issue a recovery link:
+Set `SMTP_URL` and `MAIL_FROM` to let people sign themselves back in: the entry screen then offers **Email me a sign-in link**, and owner-issued invites are mailed as well as shown for copying. The reply is identical for members and strangers, so the form cannot be used to discover who belongs to the office. A member gets at most one self-service link per minute, and a link issued this way is _added_ rather than swapped in, so somebody submitting a colleague's address cannot invalidate the link that colleague is about to use. Without both variables the form is hidden and members depend on the owner, as before. Link secrets live in the URL fragment, are removed immediately on arrival, are never sent as URL query parameters, and are stored only as hashes. Sessions use HttpOnly, SameSite=Strict cookies (Secure when APP_ORIGIN uses HTTPS).
+
+The owner is a member like any other, so with email configured they recover from the entry screen too. Failing that (no SMTP, or mail is down), an operator with access to Docker can issue a recovery link:
 
 ```sh
 docker compose exec app npm run auth:owner-link
@@ -40,21 +42,23 @@ Anyone with server/DB administration access is already trusted. This recovery pa
 
 Optional: copy `.env.example` to `.env`. Compose reads it; host-side Node commands require exported variables.
 
-| Variable               | Default                                          | Purpose                                                                                                                           |
-| ---------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `APP_ORIGIN`           | `http://localhost:3000`                          | Exact browser origin; HTTP mutations and WebSocket upgrades enforce it                                                            |
-| `APP_PORT`             | `3000`                                           | Published host port; change APP_ORIGIN to match                                                                                   |
-| `BIND_ADDRESS`         | `127.0.0.1`                                      | Local-only by default                                                                                                             |
-| `POSTGRES_PASSWORD`    | `office`                                         | Local dev credential; change for deployment (use URL-safe characters, or override the Compose DB URL with a properly encoded URL) |
-| `BOOTSTRAP_SECRET`     | random, printed once per unclaimed boot          | Optional fixed first-owner claim secret                                                                                           |
-| `DATABASE_URL`         | `postgres://office:office@localhost:5432/office` | Host-side server/CLI database; Compose supplies its own DB URL                                                                    |
-| `WORKSPACE_ID`         | `00000000-0000-4000-8000-000000000001`           | One process owns this workspace; UI exposes only that workspace                                                                   |
-| `MAP_FILE`             | `maps/office.tmj`                                | Initial seed only; existing workspaces use the database revision                                                                  |
-| `LIVEKIT_WS_URL`       | `ws://localhost:7880`                            | Browser-facing LiveKit signaling URL; use `wss://` with HTTPS                                                                     |
-| `LIVEKIT_API_KEY`      | `devkey`                                         | LiveKit API key, shared by the app and the SFU; replace for deployment                                                            |
-| `LIVEKIT_API_SECRET`   | `secret`                                         | LiveKit API secret; replace for deployment (32+ characters)                                                                       |
-| `LIVEKIT_BIND_ADDRESS` | `127.0.0.1`                                      | Address publishing the LiveKit TCP/UDP ports                                                                                      |
-| `LIVEKIT_NODE_IP`      | `127.0.0.1`                                      | Address LiveKit advertises to browsers; the public IP when deployed                                                               |
+| Variable               | Default                                          | Purpose                                                                                                                               |
+| ---------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ORIGIN`           | `http://localhost:3000`                          | Exact browser origin; HTTP mutations and WebSocket upgrades enforce it                                                                |
+| `APP_PORT`             | `3000`                                           | Published host port; change APP_ORIGIN to match                                                                                       |
+| `BIND_ADDRESS`         | `127.0.0.1`                                      | Local-only by default                                                                                                                 |
+| `POSTGRES_PASSWORD`    | `office`                                         | Local dev credential; change for deployment (use URL-safe characters, or override the Compose DB URL with a properly encoded URL)     |
+| `BOOTSTRAP_SECRET`     | random, printed once per unclaimed boot          | Optional fixed first-owner claim secret                                                                                               |
+| `SMTP_URL`             | unset                                            | SMTP server for sign-in links, e.g. `smtps://user:pass@smtp.example.com:465`; self-service sign-in is off unless set with `MAIL_FROM` |
+| `MAIL_FROM`            | unset                                            | From address on sign-in emails, e.g. `Tiny Office <office@example.com>`                                                               |
+| `DATABASE_URL`         | `postgres://office:office@localhost:5432/office` | Host-side server/CLI database; Compose supplies its own DB URL                                                                        |
+| `WORKSPACE_ID`         | `00000000-0000-4000-8000-000000000001`           | One process owns this workspace; UI exposes only that workspace                                                                       |
+| `MAP_FILE`             | `maps/office.tmj`                                | Initial seed only; existing workspaces use the database revision                                                                      |
+| `LIVEKIT_WS_URL`       | `ws://localhost:7880`                            | Browser-facing LiveKit signaling URL; use `wss://` with HTTPS                                                                         |
+| `LIVEKIT_API_KEY`      | `devkey`                                         | LiveKit API key, shared by the app and the SFU; replace for deployment                                                                |
+| `LIVEKIT_API_SECRET`   | `secret`                                         | LiveKit API secret; replace for deployment (32+ characters)                                                                           |
+| `LIVEKIT_BIND_ADDRESS` | `127.0.0.1`                                      | Address publishing the LiveKit TCP/UDP ports                                                                                          |
+| `LIVEKIT_NODE_IP`      | `127.0.0.1`                                      | Address LiveKit advertises to browsers; the public IP when deployed                                                                   |
 
 ### Deploying media: HTTPS, UDP and TURN
 
