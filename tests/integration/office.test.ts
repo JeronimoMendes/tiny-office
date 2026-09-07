@@ -223,7 +223,7 @@ it('refuses self-service sign-in when email delivery is not configured', async (
   }
 });
 
-it('lets members claim an available desk only while standing in it', async () => {
+it('lets members claim an available desk while standing in it, and leave it again', async () => {
   const token = await store.invite(id, 'member@example.test', 'Member', raw);
   const session = await store.redeem(token);
   const cookie = `office_session=${session}`;
@@ -262,6 +262,24 @@ it('lets members claim an available desk only while standing in it', async () =>
     ).statusCode,
   ).toBe(200);
   expect((await store.workspace(id)).desks['desk-2']).toBe(memberId);
+
+  const leave = () =>
+    office.app.inject({
+      method: 'DELETE',
+      url: '/api/desks/mine',
+      headers: headers(cookie),
+      payload: {},
+    });
+  expect((await leave()).statusCode).toBe(200);
+  expect((await store.workspace(id)).desks['desk-2']).toBeUndefined();
+  expect(office.world.workspace.desks['desk-2']).toBeUndefined();
+  expect((await leave()).statusCode).toBe(409);
+  await office.app.inject({
+    method: 'POST',
+    url: '/api/desks/desk-2/claim',
+    headers: headers(cookie),
+    payload: {},
+  });
 
   await office.app.inject({
     method: 'PUT',

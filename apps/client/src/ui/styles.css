@@ -536,6 +536,24 @@ form .primary {
   line-height: 1.7;
   color: #9dad93;
 }
+.desk-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 18px 12px;
+  font-size: 11px;
+}
+.desk-note strong {
+  display: block;
+  font-weight: 500;
+  color: #c9d1bc;
+}
+.desk-note button {
+  padding: 7px 11px;
+  font-size: 11px;
+  white-space: nowrap;
+}
 .text-button {
   background: none;
   border: 0;

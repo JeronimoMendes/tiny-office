@@ -280,6 +280,17 @@ function Office({ info }: { info: SessionInfo }) {
       setDeskBusy(false);
     }
   }
+  async function leaveDesk() {
+    setDeskBusy(true);
+    setError('');
+    try {
+      await api('/desks/mine', {}, 'DELETE');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeskBusy(false);
+    }
+  }
   async function setStatus(status: SessionInfo['user']['status']) {
     setStatusBusy(true);
     setError('');
@@ -448,6 +459,17 @@ function Office({ info }: { info: SessionInfo }) {
             <strong>Room to settle in.</strong>
             <p>Walk into a desk or meeting room to join its private conversation.</p>
           </div>
+          {selfDesk && (
+            <div className="desk-note">
+              <div>
+                <strong>Your desk</strong>
+                <small>{selfDesk.name}</small>
+              </div>
+              <button disabled={deskBusy} onClick={() => void leaveDesk()}>
+                {deskBusy ? 'Leaving…' : 'Leave desk'}
+              </button>
+            </div>
+          )}
           {view.user.role === 'owner' && (
             <>
               <OwnerPanel view={view} />
