@@ -216,6 +216,13 @@ function Office({ info }: { info: SessionInfo }) {
   const roomBoard = view.whiteboard?.zoneId === self?.zoneId ? view.whiteboard : null;
   const zoneName = (id: string | null) =>
     officeMap.zones.find((zone) => zone.id === id)?.name ?? 'Open floor';
+  const locationName = (id: string | null) => {
+    const zone = officeMap.zones.find((candidate) => candidate.id === id);
+    if (!zone) return 'Open floor';
+    if (zone.kind !== 'desk') return zone.name;
+    const owner = view.members.find((member) => member.id === view.workspace.desks[zone.id]);
+    return owner ? `${owner.displayName}'s desk` : zone.name;
+  };
   const online = new Set(view.players.map((p) => p.id));
   useEffect(() => {
     const zoneId = self?.zoneId ?? null;
@@ -324,7 +331,7 @@ function Office({ info }: { info: SessionInfo }) {
         </div>
       </header>
       <div className="location-chip glass">
-        <span>⌖</span> {zoneName(self?.zoneId ?? null)}{' '}
+        <span>⌖</span> {locationName(self?.zoneId ?? null)}{' '}
         <span className="quiet-tag">{self?.zoneId ? 'Zone' : 'Quiet space'}</span>
       </div>
       {!selfDesk && (

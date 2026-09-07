@@ -176,10 +176,8 @@ export class OfficeScene extends Phaser.Scene {
     const outline = this.zoneOutlines.get(zone.id);
     const label = this.zoneLabels.get(zone.id);
     if (!outline || !label) return;
-    const owner = this.snapshot.members.find(
-      (member) => member.id === this.snapshot.workspace.desks[zone.id],
-    );
-    const available = zone.kind === 'desk' && !owner;
+    const occupied = zone.kind === 'desk' && Boolean(this.snapshot.workspace.desks[zone.id]);
+    const available = zone.kind === 'desk' && !occupied;
     outline.clear();
     if (available) {
       outline.fillStyle(0xd8cb94, 0.1);
@@ -193,9 +191,8 @@ export class OfficeScene extends Phaser.Scene {
       available ? 0.85 : 0.32,
     );
     outline.strokeRoundedRect(zone.x + 3, zone.y + 3, zone.width - 6, zone.height - 6, 8);
-    label.setText(
-      owner ? `${owner.displayName}'s desk` : available ? `✦ Available · ${zone.name}` : zone.name,
-    );
+    label.setVisible(!occupied);
+    label.setText(available ? `✦ Available · ${zone.name}` : zone.name);
   }
   private decorateTiles(tiled: TiledMap, scale: number) {
     const columns = tiled.tilesets[0].columns;
