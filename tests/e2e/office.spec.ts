@@ -1,10 +1,20 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { Player, ServerMessage, SessionInfo } from '@office/shared';
+import type { Input, Player, ServerMessage, SessionInfo } from '@office/shared';
 
 function observePlayers(page: Page) {
   const players = new Map<string, Player>();
+  let sentSeq = 0;
+  let stopSeq = 0;
+  let ack = 0;
   page.on('websocket', (socket) => {
     if (new URL(socket.url()).pathname !== '/ws') return;
+    sentSeq = stopSeq = ack = 0;
+    socket.on('framesent', ({ payload }) => {
+      const message = JSON.parse(payload.toString()) as { type: string } | Input;
+      if (message.type !== 'input' || !('seq' in message)) return;
+      sentSeq = message.seq;
+      if (message.heading === null) stopSeq = message.seq;
+    });
     socket.on('framereceived', ({ payload }) => {
       const message = JSON.parse(payload.toString()) as ServerMessage;
       if (message.type === 'welcome') {
@@ -12,12 +22,23 @@ function observePlayers(page: Page) {
         for (const p of message.players) players.set(p.id, p);
       }
       if (message.type === 'delta') {
+        ack = message.ack;
         for (const id of message.removedPlayerIds) players.delete(id);
         for (const p of message.changedPlayers) players.set(p.id, p);
       }
     });
   });
-  return players;
+  return Object.assign(players, {
+    async releaseKeys(...keys: string[]) {
+      const before = sentSeq;
+      for (const key of keys) await page.keyboard.up(key);
+      // An idle tick can report moving:false before keyup reaches the server.
+      // Wait for a null-heading input sent after release and its acknowledgement.
+      await expect.poll(() => stopSeq).toBeGreaterThan(before);
+      const released = stopSeq;
+      await expect.poll(() => ack).toBeGreaterThanOrEqual(released);
+    },
+  });
 }
 
 test('owner invites a coworker, both move, profile/desks persist and reconnect restores position', async ({
@@ -84,11 +105,11 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await page.locator('.map-stage').click({ position: { x: 600, y: 450 } });
   await page.keyboard.down('ArrowRight');
   await expect.poll(() => coworkerPlayers.get(owner.id)?.x).toBeGreaterThan(start.x + 48);
-  await page.keyboard.up('ArrowRight');
+  await ownerPlayers.releaseKeys('ArrowRight');
   await expect.poll(() => ownerPlayers.get(owner.id)?.moving).toBe(false);
   await page.keyboard.down('ArrowRight');
   await expect.poll(() => coworkerPlayers.get(owner.id)?.zoneId).toBe('desk-7');
-  await page.keyboard.up('ArrowRight');
+  await ownerPlayers.releaseKeys('ArrowRight');
   await expect.poll(() => ownerPlayers.get(owner.id)?.moving).toBe(false);
   await expect(coworker.getByTestId(`person-${owner.id}`)).toContainText('Desk 7');
   await expect(page.getByRole('button', { name: 'Expand call', exact: true })).toHaveCount(0);
@@ -100,7 +121,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await coworker.locator('.map-stage').click({ position: { x: 600, y: 450 } });
   await coworker.keyboard.down('ArrowRight');
   await expect.poll(() => coworkerPlayers.get(bob.id)?.zoneId).toBe('desk-7');
-  await coworker.keyboard.up('ArrowRight');
+  await coworkerPlayers.releaseKeys('ArrowRight');
   await expect(page.getByRole('button', { name: 'Stop video', exact: true })).toBeEnabled();
   await expect(coworker.getByRole('button', { name: 'Stop video', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Mute', exact: true })).toBeEnabled();
@@ -199,7 +220,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   });
   await coworker.keyboard.down('ArrowLeft');
   await expect.poll(() => coworkerPlayers.get(bob.id)?.zoneId).toBeNull();
-  await coworker.keyboard.up('ArrowLeft');
+  await coworkerPlayers.releaseKeys('ArrowLeft');
   await expect(coworker.getByText('Open floor is quiet')).toBeVisible();
   await expect(expand).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Expand call', exact: true })).toHaveCount(0);
@@ -218,8 +239,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await coworker.keyboard.down('a');
   await expect.poll(() => ownerPlayers.get(bob.id)?.y).toBeLessThan(bobStart.y - 48);
   await expect.poll(() => ownerPlayers.get(bob.id)?.x).toBeLessThan(bobStart.x - 48);
-  await coworker.keyboard.up('w');
-  await coworker.keyboard.up('a');
+  await coworkerPlayers.releaseKeys('w', 'a');
   await expect.poll(() => coworkerPlayers.get(bob.id)?.moving).toBe(false);
   expect(coworkerPlayers.get(bob.id)?.direction).toBe('left');
   await page.reload();

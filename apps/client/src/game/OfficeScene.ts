@@ -196,6 +196,7 @@ export class OfficeScene extends Phaser.Scene {
   }
   private decorateTiles(tiled: TiledMap, scale: number) {
     const columns = tiled.tilesets[0].columns;
+    const texture = this.textures.get('office-tiles');
     for (const object of decorObjects(tiled)) {
       const centerX = object.x + object.width / 2;
       const centerY = object.y + object.height / 2;
@@ -204,7 +205,20 @@ export class OfficeScene extends Phaser.Scene {
       const sine = Math.sin(radians);
       object.data.forEach((gid, index) => {
         if (!gid) return;
-        const frame = gid - 1;
+        const tile = gid - 1;
+        const frame = `decor-${columns}-${scale}-${tile}`;
+        // Cropping leaves an image's dimensions equal to the entire sheet, so
+        // setDisplaySize would shrink the tile along with it. Use a real frame.
+        // Textures survive scene restarts after workspace edits; reuse frames.
+        if (!texture.has(frame))
+          texture.add(
+            frame,
+            0,
+            (tile % columns) * 32 * scale,
+            Math.floor(tile / columns) * 32 * scale,
+            32 * scale,
+            32 * scale,
+          );
         const localX = -object.width / 2 + (index % object.columns) * 32 + 16;
         const localY = -object.height / 2 + Math.floor(index / object.columns) * 32 + 16;
         this.add
@@ -212,12 +226,7 @@ export class OfficeScene extends Phaser.Scene {
             centerX + localX * cosine - localY * sine,
             centerY + localX * sine + localY * cosine,
             'office-tiles',
-          )
-          .setCrop(
-            (frame % columns) * 32 * scale,
-            Math.floor(frame / columns) * 32 * scale,
-            32 * scale,
-            32 * scale,
+            frame,
           )
           .setDisplaySize(32, 32)
           .setAngle(object.rotation)
@@ -285,7 +294,9 @@ export class OfficeScene extends Phaser.Scene {
     const target = event.target as HTMLElement;
     if (
       document.querySelector('.whiteboard-dialog') ||
-      target.closest('input,textarea,select,[contenteditable],dialog:modal') ||
+      target.closest(
+        'input,textarea,select,button,[contenteditable],dialog:modal,[role="dialog"]',
+      ) ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey
