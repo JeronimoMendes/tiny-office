@@ -776,9 +776,88 @@ form .primary {
   font-size: 11px;
 }
 .media-controls {
+  position: static;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  color: inherit;
+  background: transparent;
+}
+.media-controls[open],
+.media-actions {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.media-controls.media-expanded {
+  --call-inset: clamp(12px, 4vmin, 48px);
+  position: fixed;
+  inset: var(--call-inset);
+  width: calc(100% - 2 * var(--call-inset));
+  height: calc(100dvh - 2 * var(--call-inset));
+  box-sizing: border-box;
+  border: 1px solid #d3ddbc33;
+  border-radius: 20px;
+  box-shadow: 0 16px 64px #0006;
+  padding: clamp(12px, 3vw, 32px);
+  flex-direction: column;
+  gap: 20px;
+  background: #17251e;
+  color: #eef3e4;
+}
+.media-expanded::backdrop {
+  background: #17251e40;
+}
+.media-expanded h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.media-expanded .media-tracks {
+  position: static;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 16px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.media-expanded .media-tracks:not(:has(.media-tile))::before {
+  content: 'Cameras are off. You can still talk here.';
+  margin: auto;
+  align-self: center;
+  color: #afbc9f;
+}
+.media-expanded .media-tile {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+.media-expanded .media-tile video {
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+  object-fit: cover;
+}
+.media-expanded .media-name {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  font-size: 13px;
+}
+.media-expanded .media-actions {
+  flex-shrink: 0;
+}
+.media-controls.media-expanded small {
+  max-width: 200px;
 }
 .media-controls .media-toggle {
   display: inline-flex;
