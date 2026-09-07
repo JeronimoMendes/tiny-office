@@ -661,13 +661,33 @@ form .primary {
   align-items: center;
   gap: 7px;
 }
-.media-controls button {
-  padding: 7px 9px;
-  font-size: 10px;
+.media-controls .media-toggle {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
-.media-controls button[aria-pressed='true'] {
-  background: #c5d2b4;
+.media-toggle svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.media-controls .media-toggle:disabled {
+  cursor: default;
+}
+.media-controls .media-toggle[aria-pressed='true'] {
+  background: #fff;
+  border-color: #fff;
   color: #2c3c30;
+}
+.media-controls .media-toggle[aria-pressed='true']:hover {
+  background: #f0f0e8;
 }
 .media-controls small {
   max-width: 110px;
