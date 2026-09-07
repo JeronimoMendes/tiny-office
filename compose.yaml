@@ -14,7 +14,7 @@ services:
       timeout: 3s
       retries: 20
   livekit:
-    image: livekit/livekit-server:v1.9.10
+    image: livekit/livekit-server:v1.13.6
     restart: unless-stopped
     command: --config /etc/livekit/livekit.yaml --bind 0.0.0.0 --node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}
     environment:
@@ -25,6 +25,11 @@ services:
       - '${LIVEKIT_BIND_ADDRESS:-127.0.0.1}:7880:7880'
       - '${LIVEKIT_BIND_ADDRESS:-127.0.0.1}:7881:7881'
       - '${LIVEKIT_BIND_ADDRESS:-127.0.0.1}:7882:7882/udp'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:7880/']
+      interval: 2s
+      timeout: 3s
+      retries: 20
   app:
     build: .
     restart: unless-stopped
@@ -48,7 +53,7 @@ services:
       db:
         condition: service_healthy
       livekit:
-        condition: service_started
+        condition: service_healthy
     stop_grace_period: 15s
 volumes:
   office-data:

@@ -62,7 +62,7 @@ Browsers only grant microphone and camera access on a secure origin, so any depl
 
 - Put a TLS reverse proxy in front of the app, forward `/ws` upgrades, and set `APP_ORIGIN` to the public `https://` origin.
 - Terminate TLS for LiveKit signaling too and set `LIVEKIT_WS_URL` to that public `wss://` endpoint. A page served over HTTPS cannot open a plain `ws://` SFU connection.
-- Replace `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; the SFU reads the same pair through `LIVEKIT_KEYS`, so app and SFU stay in step. They are the only credential protecting room administration.
+- Replace `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; the SFU reads the same pair (through `LIVEKIT_KEYS` in `compose.yaml`, through the config body on Coolify), so app and SFU stay in step. They are the only credential protecting room administration.
 - Media itself is UDP. Publish `7882/udp` (and `7881/tcp` as a fallback) to the internet, set `LIVEKIT_BIND_ADDRESS=0.0.0.0`, set `LIVEKIT_NODE_IP` to the public address, or drop `--node-ip` from `compose.yaml` and set `use_external_ip: true` in [deploy/livekit.yaml](deploy/livekit.yaml).
 - Clients behind firewalls that block outbound UDP need TURN. Uncomment the `turn` block in `deploy/livekit.yaml`, point it at a certificate for your domain, and publish `5349/tcp` (443 is the port most likely to be allowed) plus `3478/udp`.
 
@@ -82,7 +82,7 @@ Browsers only grant microphone and camera access on a secure origin, so any depl
    ```
 
 3. Give both services a domain: `https://office.example.com` on `app` (port 3000) and `https://livekit.example.com` on `livekit` (port 7880). They must match `APP_ORIGIN` and `LIVEKIT_WS_URL` exactly, host for host. Coolify issues the certificates and its proxy passes WebSocket upgrades through, so `/ws` and LiveKit signaling need no extra configuration.
-4. Open `7881/tcp` and `7882/udp` on the server firewall and any cloud security group. The proxy does not carry media; LiveKit publishes these itself and discovers the public address through `use_external_ip` in [deploy/livekit.coolify.yaml](deploy/livekit.coolify.yaml). That config is baked into a small image ([deploy/livekit.Dockerfile](deploy/livekit.Dockerfile)): Coolify runs the stack outside the repository clone, and a bind-mounted config resolves to a path Docker replaces with an empty directory, which LiveKit reports as `read /etc/livekit/livekit.yaml: is a directory`.
+4. Open `7881/tcp` and `7882/udp` on the server firewall and any cloud security group. The proxy does not carry media; LiveKit publishes these itself and discovers the public address through `use_external_ip` in the `LIVEKIT_CONFIG` block of [compose.coolify.yaml](compose.coolify.yaml). The config travels in the compose file rather than a bind mount because Coolify runs the stack outside the repository clone, where a mounted path resolves to an empty directory Docker creates, which LiveKit reports as `read /etc/livekit/livekit.yaml: is a directory`.
 5. Deploy, then read the app logs for the bootstrap secret and claim ownership at `APP_ORIGIN`. Leave `BOOTSTRAP_SECRET` unset to get a fresh one per unclaimed boot.
 
 Coolify's terminal on the `app` service runs the operator commands: `npm run auth:owner-link` for owner recovery, `npm run map:import -- maps/office.tmj` after a map change. The `office-data` volume survives redeploys; deleting the resource with volumes deletes the office and accounts.
