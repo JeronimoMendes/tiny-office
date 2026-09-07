@@ -2,17 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import {
   atom,
   createPresenceStateDerivation,
-  createTLCurrentUser,
   createTLStore,
-  createUserId,
+  createTLUser,
   defaultShapeUtils,
   InstancePresenceRecordType,
   react,
   Tldraw,
-  UserRecordType,
   type Editor,
   type TLInstancePresence,
   type TLRecord,
+  type TLUserPreferences,
 } from 'tldraw';
 import 'tldraw/tldraw.css';
 import type { WhiteboardPresence, WhiteboardRecord, WhiteboardState } from '@office/shared';
@@ -29,13 +28,17 @@ function BoardCanvas({
 }) {
   const self = session.getSnapshot().user;
   const [store] = useState(() => createTLStore({ shapeUtils: defaultShapeUtils }));
+  const [userPreferences] = useState(() =>
+    atom<TLUserPreferences>('whiteboard user preferences', {
+      id: self.id,
+      name: self.displayName,
+      color: collaboratorColor(self.id),
+    }),
+  );
   const [currentUser] = useState(() =>
-    createTLCurrentUser({
-      userPreferences: atom('whiteboard user preferences', {
-        id: self.id,
-        name: self.displayName,
-        color: collaboratorColor(self.id),
-      }),
+    createTLUser({
+      userPreferences,
+      setUserPreferences: (preferences) => userPreferences.set(preferences),
     }),
   );
   const remoteIds = useRef(new Set<string>());
@@ -54,8 +57,7 @@ function BoardCanvas({
   }, [board.records, preview, store]);
 
   useEffect(() => {
-    const ownUserId = createUserId(self.id);
-    const remote = board.presences.filter((presence) => presence.userId !== ownUserId);
+    const remote = board.presences.filter((presence) => presence.userId !== self.id);
     const nextIds = new Set(remote.map((presence) => presence.id));
     const removed = [...remotePresenceIds.current].filter((id) => !nextIds.has(id));
     store.mergeRemoteChanges(() => {
@@ -96,16 +98,10 @@ function BoardCanvas({
           mountedEditor.zoomToFit();
           return;
         }
-        const user = UserRecordType.create({
-          id: createUserId(self.id),
-          name: self.displayName,
-          color: collaboratorColor(self.id),
-          imageUrl: '',
-          meta: {},
-        });
-        const presence = createPresenceStateDerivation(atom('whiteboard user', user), {
-          instanceId: InstancePresenceRecordType.createId(self.id),
-        })(store);
+        const presence = createPresenceStateDerivation(
+          userPreferences,
+          InstancePresenceRecordType.createId(self.id),
+        )(store);
         let latest: TLInstancePresence | null = null;
         let timer: ReturnType<typeof setTimeout> | null = null;
         const flush = () => {
