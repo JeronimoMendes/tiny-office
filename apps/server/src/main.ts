@@ -38,7 +38,15 @@ if (!(await pool.query('SELECT 1 FROM workspaces WHERE id=$1', [workspaceId])).r
   );
 }
 const mailer = createMailer();
-if (!mailer.enabled)
+if (mailer.enabled)
+  // Report an unreachable or rejecting SMTP server at boot instead of leaving
+  // it to be discovered by the first person who cannot sign in.
+  void mailer
+    .verify?.()
+    .catch((error: Error) =>
+      console.error(`SMTP server refused the connection check: ${error.message}`),
+    );
+else
   console.log(
     'Email sign-in is off (set SMTP_URL and MAIL_FROM). Members who lose their session need a link from the owner, and the owner needs `npm run auth:owner-link`.',
   );
