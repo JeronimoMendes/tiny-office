@@ -33,6 +33,24 @@ function tile(video: HTMLMediaElement, name: string) {
 type TokenResponse =
   { enabled: false; reason: string } | { enabled: true; url: string; token: string; room: string };
 
+function MicrophoneIcon({ enabled }: { enabled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 6a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0V6M7 10v1a5 5 0 0 0 10 0v-1M12 16v3M9 19h6" />
+      {!enabled && <path d="M4 4l16 16" />}
+    </svg>
+  );
+}
+
+function ScreenIcon({ enabled }: { enabled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5h16v12H4zM9 21h6M12 17v4" />
+      {!enabled && <path d="M3 3l18 18" />}
+    </svg>
+  );
+}
+
 export function MediaControls({
   zoneId,
   status,
@@ -135,7 +153,9 @@ export function MediaControls({
         setRoom(next);
         setMessage(status === 'focus' ? 'Focused · mic and video off' : 'In zone conversation');
       })
-      .catch((error) => setMessage((error as Error).message));
+      .catch((error) => {
+        if (!cancelled) setMessage((error as Error).message);
+      });
     return () => {
       cancelled = true;
       if (roomRef.current === next) roomRef.current = null;
@@ -233,11 +253,25 @@ export function MediaControls({
   return (
     <div className="media-controls">
       <div className="media-tracks" ref={media} aria-label="Conversation media" />
-      <button disabled={!room} aria-pressed={mic} onClick={() => void setMicrophone(!mic)}>
-        {mic ? 'Mute' : 'Mic'}
+      <button
+        className="media-toggle"
+        disabled={!room}
+        aria-label={mic ? 'Mute' : 'Mic'}
+        aria-pressed={mic}
+        title={mic ? 'Turn off microphone' : 'Turn on microphone'}
+        onClick={() => void setMicrophone(!mic)}
+      >
+        <MicrophoneIcon enabled={mic} />
       </button>
-      <button disabled={!room} aria-pressed={camera} onClick={() => void setVideo(!camera)}>
-        {camera ? 'Stop video' : 'Video'}
+      <button
+        className="media-toggle"
+        disabled={!room}
+        aria-label={camera ? 'Stop video' : 'Video'}
+        aria-pressed={camera}
+        title={camera ? 'Turn off video' : 'Turn on video'}
+        onClick={() => void setVideo(!camera)}
+      >
+        <ScreenIcon enabled={camera} />
       </button>
       <small>{message}</small>
     </div>

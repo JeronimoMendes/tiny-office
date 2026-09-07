@@ -216,6 +216,13 @@ function Office({ info }: { info: SessionInfo }) {
   const roomBoard = view.whiteboard?.zoneId === self?.zoneId ? view.whiteboard : null;
   const zoneName = (id: string | null) =>
     officeMap.zones.find((zone) => zone.id === id)?.name ?? 'Open floor';
+  const locationName = (id: string | null) => {
+    const zone = officeMap.zones.find((candidate) => candidate.id === id);
+    if (!zone) return 'Open floor';
+    if (zone.kind !== 'desk') return zone.name;
+    const owner = view.members.find((member) => member.id === view.workspace.desks[zone.id]);
+    return owner ? `${owner.displayName}'s desk` : zone.name;
+  };
   const online = new Set(view.players.map((p) => p.id));
   useEffect(() => {
     const zoneId = self?.zoneId ?? null;
@@ -273,6 +280,17 @@ function Office({ info }: { info: SessionInfo }) {
       setDeskBusy(false);
     }
   }
+  async function leaveDesk() {
+    setDeskBusy(true);
+    setError('');
+    try {
+      await api('/desks/mine', {}, 'DELETE');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeskBusy(false);
+    }
+  }
   async function setStatus(status: SessionInfo['user']['status']) {
     setStatusBusy(true);
     setError('');
@@ -324,7 +342,7 @@ function Office({ info }: { info: SessionInfo }) {
         </div>
       </header>
       <div className="location-chip glass">
-        <span>⌖</span> {zoneName(self?.zoneId ?? null)}{' '}
+        <span>⌖</span> {locationName(self?.zoneId ?? null)}{' '}
         <span className="quiet-tag">{self?.zoneId ? 'Zone' : 'Quiet space'}</span>
       </div>
       {!selfDesk && (
@@ -441,6 +459,17 @@ function Office({ info }: { info: SessionInfo }) {
             <strong>Room to settle in.</strong>
             <p>Walk into a desk or meeting room to join its private conversation.</p>
           </div>
+          {selfDesk && (
+            <div className="desk-note">
+              <div>
+                <strong>Your desk</strong>
+                <small>{selfDesk.name}</small>
+              </div>
+              <button disabled={deskBusy} onClick={() => void leaveDesk()}>
+                {deskBusy ? 'Leaving…' : 'Leave desk'}
+              </button>
+            </div>
+          )}
           {view.user.role === 'owner' && (
             <>
               <OwnerPanel view={view} />
