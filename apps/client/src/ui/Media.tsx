@@ -134,7 +134,9 @@ export function MediaControls({
         setRoom(next);
         setMessage(status === 'focus' ? 'Focused · incoming media off' : 'In zone conversation');
       })
-      .catch((error) => setMessage((error as Error).message));
+      .catch((error) => {
+        if (!cancelled) setMessage((error as Error).message);
+      });
     return () => {
       cancelled = true;
       published.current.clear();
