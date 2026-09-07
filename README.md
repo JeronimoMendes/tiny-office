@@ -47,6 +47,9 @@ Optional: copy `.env.example` to `.env`. Compose reads it; host-side Node comman
 | `APP_ORIGIN`           | `http://localhost:3000`                          | Exact browser origin; HTTP mutations and WebSocket upgrades enforce it                                                                                                                                                                                                                    |
 | `APP_PORT`             | `3000`                                           | Published host port; change APP_ORIGIN to match                                                                                                                                                                                                                                           |
 | `BIND_ADDRESS`         | `127.0.0.1`                                      | Local-only by default                                                                                                                                                                                                                                                                     |
+| `VITE_PORT`            | `5173`                                           | Published host port for the development client                                                                                                                                                                                                                                            |
+| `DB_PORT`              | `5432`                                           | Published host port for PostgreSQL; the development overlay publishes it, the default stack does not                                                                                                                                                                                      |
+| `COMPOSE_PROJECT_NAME` | directory name                                   | Names this stack's containers and its database volume; give a second checkout its own                                                                                                                                                                                                     |
 | `POSTGRES_PASSWORD`    | `office`                                         | Local dev credential; change for deployment (use URL-safe characters, or override the Compose DB URL with a properly encoded URL)                                                                                                                                                         |
 | `BOOTSTRAP_SECRET`     | random, printed once per unclaimed boot          | Optional fixed first-owner claim secret                                                                                                                                                                                                                                                   |
 | `SMTP_URL`             | unset                                            | SMTP server for sign-in links; self-service sign-in is off unless set with `MAIL_FROM`. `smtps://user:pass@host:465` for implicit TLS, or `smtp://user:pass@host:587?requireTLS=true` for enforced STARTTLS. Percent-encode credentials: a login that is an email address contains an `@` |
@@ -57,6 +60,9 @@ Optional: copy `.env.example` to `.env`. Compose reads it; host-side Node comman
 | `LIVEKIT_WS_URL`       | `ws://localhost:7880`                            | Browser-facing LiveKit signaling URL; use `wss://` with HTTPS                                                                                                                                                                                                                             |
 | `LIVEKIT_API_KEY`      | `devkey`                                         | LiveKit API key, shared by the app and the SFU; replace for deployment                                                                                                                                                                                                                    |
 | `LIVEKIT_API_SECRET`   | `secret`                                         | LiveKit API secret; replace for deployment (32+ characters)                                                                                                                                                                                                                               |
+| `LIVEKIT_PORT`         | `7880`                                           | LiveKit signaling port. Clients dial the media ports directly, so LiveKit listens on the same numbers the host publishes                                                                                                                                                                  |
+| `LIVEKIT_TCP_PORT`     | `7881`                                           | LiveKit RTC port for clients that cannot use UDP                                                                                                                                                                                                                                          |
+| `LIVEKIT_UDP_PORT`     | `7882`                                           | LiveKit RTC media port                                                                                                                                                                                                                                                                    |
 | `LIVEKIT_BIND_ADDRESS` | `127.0.0.1`                                      | Address publishing the LiveKit TCP/UDP ports                                                                                                                                                                                                                                              |
 | `LIVEKIT_NODE_IP`      | `127.0.0.1`                                      | Address LiveKit advertises to browsers; the public IP when deployed                                                                                                                                                                                                                       |
 
@@ -187,6 +193,34 @@ DATABASE_URL=postgres://office:office@localhost:5432/office \
 ```
 
 Stop the Compose app first (`docker compose stop app`); only one server can own a workspace. Media needs the `livekit` service running, and the credentials above must match the ones it started with. The override also exposes PostgreSQL on loopback for host-side tooling. `npm run build && npm start` serves the production build from port 3000.
+
+### Work on several branches at once
+
+A branch gets an office of its own. [Worktrunk](https://worktrunk.dev) drives the git worktrees, and [.config/wt.toml](.config/wt.toml) tells it what a new one needs:
+
+```sh
+wt switch --create meeting-rooms
+```
+
+That copies `node_modules` across from the main checkout — [.worktreeinclude](.worktreeinclude) says what travels — and writes an `.env` handing the branch a Compose project of its own and a block of ten ports, hashed from the branch name so they stay put between sessions and stay clear of the other worktrees. Six are used, counting up from the base: the app, the development client, PostgreSQL, and LiveKit's three. `docker compose up --build` then raises a second office beside the first, database volume and all, and `wt list` shows each branch's URL, dimmed until it answers.
+
+The project config also carries the aliases worth having:
+
+| Command   | Runs                                             |
+| --------- | ------------------------------------------------ |
+| `wt up`   | `docker compose up --build`                      |
+| `wt dev`  | the development overlay above                    |
+| `wt down` | `docker compose down --volumes --remove-orphans` |
+
+Extra flags pass through, so `wt dev -d` detaches. `wt merge` runs `format:check`, `typecheck` and the unit tests before it merges. `wt remove` takes the branch's containers and database down with it: the office a branch ran is disposable, so anything worth keeping should be committed first.
+
+For a worktree made with plain `git worktree add`, do the same by hand:
+
+```sh
+tools/worktree-env.sh 12000 office_meeting_rooms ../tiny-office/.env > .env
+```
+
+Whatever the generated `.env` does not define — SMTP credentials, LiveKit keys — is carried over from the checkout the branch came from. Compose reads the file itself; host-side commands need it exported, with `set -a; . ./.env; set +a`.
 
 ### Code map
 

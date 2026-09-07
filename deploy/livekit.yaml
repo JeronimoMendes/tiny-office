@@ -1,10 +1,9 @@
-# Self-hosted SFU for one workspace. Credentials come from LIVEKIT_KEYS.
-port: 7880
+# Self-hosted SFU for one workspace. Credentials come from LIVEKIT_KEYS, and
+# the ports from LIVEKIT_PORT / LIVEKIT_RTC_TCP_PORT / UDP_PORT, so a worktree
+# can move the whole stack out of the way of the office already running.
 logging:
   level: info
 rtc:
-  tcp_port: 7881
-  udp_port: 7882
   # Compose publishes the ports on loopback, so advertise the address given by
   # --node-ip. Deployments discover the public address instead: drop --node-ip
   # from compose.yaml and set use_external_ip: true.

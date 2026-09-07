@@ -1,0 +1,30 @@
+# Worktrunk project config — https://worktrunk.dev
+#
+# `wt switch --create <branch>` leaves a worktree ready to run: dependencies
+# copied from the main checkout, and a .env that hands this branch ten published
+# ports and a Compose project of its own. Two offices then run side by side.
+#
+# The port block is the branch name hashed into 10000-19999 and floored to a
+# multiple of ten; tools/worktree-env.sh lays out the six ports inside it.
+
+[pre-start]
+env = "[ -f .env ] || tools/worktree-env.sh {{ 10000 + ((branch | hash_port) - 10000) // 10 * 10 }} office_{{ branch | sanitize_db }} {{ primary_worktree_path }}/.env > .env"
+deps = "wt step copy-ignored"
+
+[pre-merge]
+format = "npm run format:check"
+typecheck = "npm run typecheck"
+test = "npm test"
+
+# The office a branch ran is disposable, so the branch takes its database with
+# it. Anything worth keeping should already be committed or exported.
+[post-remove]
+office = "docker compose -p office_{{ branch | sanitize_db }} down --volumes --remove-orphans"
+
+[aliases]
+up = "docker compose up --build {{ args }}"
+dev = "docker compose -f compose.yaml -f compose.dev.yaml up --build {{ args }}"
+down = "docker compose down --volumes --remove-orphans {{ args }}"
+
+[list]
+url = "http://localhost:{{ 10000 + ((branch | hash_port) - 10000) // 10 * 10 }}"
