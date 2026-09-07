@@ -2,7 +2,7 @@
 
 A small self-hosted, top-down virtual office. **Phase 2: audio/video.** React UI, Phaser pixel-art renderer, authoritative WebSockets, PostgreSQL persistence and a self-hosted LiveKit SFU. Architecture and phase gates: [PLAN.md](PLAN.md).
 
-Implemented: phase-1 movement and space, editable availability, and zone-based calls. Walking into a desk or meeting room joins that zone's conversation; the open floor is silent. Focus blocks incoming media and video while still allowing an explicit unmute. DND is excluded from media entirely. Every media decision comes from the authoritative server position and status: each zone is its own SFU room, credentials name one room and last two minutes, and the server reconciles LiveKit membership and publish permissions, disconnecting anyone whose permissions exceed current policy. Moods, chat and screen sharing are not implemented.
+Implemented: phase-1 movement and space, editable availability, and zone-based calls. Walking into a desk or meeting room joins that zone's conversation; the open floor is silent. Focus receives the zone conversation while keeping the local microphone and camera off until explicitly enabled. DND is excluded from media entirely. Every media decision comes from the authoritative server position and status: each zone is its own SFU room, credentials name one room and last two minutes, and the server reconciles LiveKit membership and publish permissions, disconnecting anyone whose permissions exceed current policy. Moods, chat and screen sharing are not implemented.
 
 ## Start locally
 
@@ -278,6 +278,7 @@ Coverage: 53 unit tests, 10 PostgreSQL/real-WebSocket integration tests and 1 tw
 - **Your current zone determines your conversation.** Each desk or meeting zone is its own SFU room, shared by its occupants. A person belongs to at most one conversation at a time; moving zones switches rooms.
 - Desk owners are **never summoned remotely**. They participate only when physically inside that desk zone, just like anyone else.
 - Meeting rooms have no distance falloff. Open floor stays silent, with no proximity chat.
-- Focus joins muted by default, suppresses incoming audio and disables video. Users may explicitly unmute their microphone while staying focused; incoming audio and video remain disabled.
+- Available automatically enables microphone and camera when another person enters the zone. If the tab is hidden while the zone is empty, both stay on for a three-minute grace period and then turn off; they resume when somebody enters or the user returns to the tab. Media stays on while a conversation continues in a hidden tab.
+- Focus receives audio and video from the zone but keeps the local microphone and camera off by default. Users may explicitly enable either while staying focused.
 
 DND's absolute media restriction is enforced at the SFU, not by muting UI controls: a DND member is refused a credential and removed from the room, so no media is negotiated at all. Nothing published in a zone is reachable from outside it, because the credential names a single room and browsers never receive one for another zone. Screen sharing is deferred unless explicitly added to scope.

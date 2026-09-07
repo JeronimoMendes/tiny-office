@@ -20,12 +20,12 @@ describe('media policy', () => {
     expect(conversationRoom(workspace, player('cedar', 'do-not-disturb'))).toBeNull();
   });
 
-  it('lets focus explicitly publish only a microphone and receive nothing', () => {
+  it('lets focus receive media and explicitly publish microphone or camera', () => {
     expect(mediaPolicy(player('cedar', 'focus'))).toEqual({
       eligible: true,
       canPublishMicrophone: true,
-      canPublishCamera: false,
-      canReceive: false,
+      canPublishCamera: true,
+      canReceive: true,
     });
     expect(conversationRoom(workspace, player('cedar', 'focus'))).toBe(
       conversationRoom(workspace, player('cedar', 'free')),
