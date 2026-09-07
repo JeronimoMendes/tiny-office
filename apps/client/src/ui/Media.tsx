@@ -28,6 +28,24 @@ function tile(video: HTMLMediaElement, name: string) {
 type TokenResponse =
   { enabled: false; reason: string } | { enabled: true; url: string; token: string; room: string };
 
+function MicrophoneIcon({ enabled }: { enabled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 6a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0V6M7 10v1a5 5 0 0 0 10 0v-1M12 16v3M9 19h6" />
+      {!enabled && <path d="M4 4l16 16" />}
+    </svg>
+  );
+}
+
+function ScreenIcon({ enabled }: { enabled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5h16v12H4zM9 21h6M12 17v4" />
+      {!enabled && <path d="M3 3l18 18" />}
+    </svg>
+  );
+}
+
 export function MediaControls({
   zoneId,
   status,
@@ -116,7 +134,9 @@ export function MediaControls({
         setRoom(next);
         setMessage(status === 'focus' ? 'Focused · incoming media off' : 'In zone conversation');
       })
-      .catch((error) => setMessage((error as Error).message));
+      .catch((error) => {
+        if (!cancelled) setMessage((error as Error).message);
+      });
     return () => {
       cancelled = true;
       published.current.clear();
@@ -183,16 +203,31 @@ export function MediaControls({
   return (
     <div className="media-controls">
       <div className="media-tracks" ref={media} aria-label="Conversation media" />
-      <button disabled={!room} aria-pressed={mic} onClick={() => void toggleMic()}>
-        {mic ? 'Mute' : 'Mic'}
+      <button
+        className="media-toggle"
+        disabled={!room}
+        aria-label={mic ? 'Mute' : 'Mic'}
+        aria-pressed={mic}
+        title={mic ? 'Turn off microphone' : 'Turn on microphone'}
+        onClick={() => void toggleMic()}
+      >
+        <MicrophoneIcon enabled={mic} />
       </button>
       <button
+        className="media-toggle"
         disabled={!room || status !== 'free'}
+        aria-label={camera ? 'Stop video' : 'Video'}
         aria-pressed={camera}
-        title={status === 'focus' ? 'Video is disabled while focused' : undefined}
+        title={
+          status === 'focus'
+            ? 'Video is disabled while focused'
+            : camera
+              ? 'Turn off video'
+              : 'Turn on video'
+        }
         onClick={() => void toggleCamera()}
       >
-        {camera ? 'Stop video' : 'Video'}
+        <ScreenIcon enabled={camera} />
       </button>
       <small>{message}</small>
     </div>
