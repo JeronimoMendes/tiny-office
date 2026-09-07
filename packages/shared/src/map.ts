@@ -70,6 +70,18 @@ export type Zone = {
   width: number;
   height: number;
 };
+export type DecorObject = {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  columns: number;
+  data: number[];
+  solid: boolean;
+};
 export type OfficeMap = {
   tiled: TiledMap;
   width: number;
@@ -78,6 +90,42 @@ export type OfficeMap = {
   zones: Zone[];
   spawn: { x: number; y: number };
 };
+
+export function decorObjects(tiled: TiledMap): DecorObject[] {
+  const objects =
+    tiled.layers.find((l) => l.name === 'decor' && l.type === 'objectgroup')?.objects ?? [];
+  return objects.map((object) => {
+    const props = Object.fromEntries(object.properties.map((item) => [item.name, item.value]));
+    let data: unknown;
+    try {
+      data = JSON.parse(String(props.tileData));
+    } catch {
+      throw new Error('Decor objects require valid tileData');
+    }
+    const columns = z.number().int().positive().parse(props.columns);
+    const tiles = z.array(z.number().int().nonnegative()).nonempty().parse(data);
+    if (
+      object.point ||
+      object.width <= 0 ||
+      object.height <= 0 ||
+      tiles.length % columns ||
+      tiles.some((gid) => gid > tiled.tilesets[0].tilecount)
+    )
+      throw new Error('Invalid decor object');
+    return {
+      id: object.id,
+      name: object.name,
+      x: object.x,
+      y: object.y,
+      width: object.width,
+      height: object.height,
+      rotation: object.rotation,
+      columns,
+      data: tiles,
+      solid: props.solid === true,
+    };
+  });
+}
 
 export function parseMap(input: unknown): OfficeMap {
   const tiled = tiledSchema.parse(input);
@@ -96,6 +144,24 @@ export function parseMap(input: unknown): OfficeMap {
       throw new Error('Tile layer dimensions must match the map');
     if (l.data?.some((gid) => gid > tiled.tilesets[0].tilecount))
       throw new Error('Unknown or flipped tile GID');
+  }
+  const collisionData = [...collision.data];
+  for (const decor of decorObjects(tiled)) {
+    if (!decor.solid) continue;
+    const centerX = decor.x + decor.width / 2;
+    const centerY = decor.y + decor.height / 2;
+    const radians = (-decor.rotation * Math.PI) / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    for (let row = 0; row < tiled.height; row++)
+      for (let column = 0; column < tiled.width; column++) {
+        const dx = column * 32 + 16 - centerX;
+        const dy = row * 32 + 16 - centerY;
+        const localX = dx * cosine - dy * sine;
+        const localY = dx * sine + dy * cosine;
+        if (Math.abs(localX) < decor.width / 2 && Math.abs(localY) < decor.height / 2)
+          collisionData[row * tiled.width + column] = 1;
+      }
   }
   const zones = (
     tiled.layers.find((l) => l.name === 'zones' && l.type === 'objectgroup')?.objects ?? []
@@ -145,7 +211,7 @@ export function parseMap(input: unknown): OfficeMap {
     tiled,
     width: tiled.width * 32,
     height: tiled.height * 32,
-    collision: collision.data,
+    collision: collisionData,
     zones,
     spawn: { x: spawn.x, y: spawn.y },
   };

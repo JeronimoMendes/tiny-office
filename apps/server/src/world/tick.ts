@@ -36,7 +36,7 @@ type Connection = {
 };
 
 export class World {
-  readonly map;
+  map;
   readonly members = new Map<string, SavedMember>();
   readonly connections = new Map<string, Connection>();
   private changed = new Set<string>();
@@ -47,7 +47,7 @@ export class World {
   tickNumber = 0;
 
   constructor(
-    readonly workspace: Workspace,
+    public workspace: Workspace,
     members: SavedMember[],
     store: Pick<Store, 'savePositions'>,
   ) {
@@ -257,6 +257,35 @@ export class World {
         this.detach(id, c.peer);
       }
   }
+  applyWorkspaceMap(workspace: Workspace) {
+    const map = parseMap(workspace.map);
+    if (!canStand(map, map.spawn.x, map.spawn.y)) throw new Error('Spawn is blocked');
+    this.workspace = workspace;
+    this.map = map;
+    this.whiteboards.clear();
+    for (const [id, member] of this.members) {
+      const connection = this.connections.get(id);
+      const position = connection?.player ?? member;
+      const next = canStand(map, position.x, position.y)
+        ? { x: position.x, y: position.y }
+        : map.spawn;
+      member.x = next.x;
+      member.y = next.y;
+      this.writer.mark(member);
+      if (connection) {
+        Object.assign(connection.player, next, {
+          zoneId: zoneAt(map, next.x, next.y),
+          moving: false,
+        });
+        // Reconnecting supplies an atomic map + player snapshot and clears any
+        // prediction queued against the old collision grid.
+        connection.peer.close(4010, 'Workspace map updated');
+        this.detach(id, connection.peer);
+      }
+    }
+    this.mediaPolicyChanged?.();
+  }
+
   updateMembers(members: SavedMember[], desks: Workspace['desks']) {
     for (const member of members) {
       const existing = this.members.get(member.id);

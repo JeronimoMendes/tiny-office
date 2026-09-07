@@ -20,12 +20,12 @@ Profiles save an optional `appearance` record alongside the legacy character num
 
 Each starter desk has a hidden `surfaces` rectangle with a stable `surfaceId` matching its desk zone ID. The rectangle covers only the desktop, not the chair, legs or surrounding call zone. Desk props reference that surface ID. These are authoring metadata, not editable state or new collision rules.
 
-For a future desk editor, store `{ instanceId, surfaceId, itemId, x, y }` with `x/y` relative to the surface origin in world pixels. Do not snap to 32px map cells. Add per-item contact footprints and enforce those against the surface rectangle; taller artwork can extend above its contact area. Render contact points back in world coordinates and use their Y value for stacking. Authorize edits against the desk assignment, validate bounds server-side, persist and broadcast placements separately from the map revision. Removing an item should leave the clean desktop intact.
+The built-in owner editor places these props off-grid and can associate them with a stable desk ID. Props can be moved and rotated independently; moving a desk zone carries its associated small items. Removing an item leaves the clean desktop object intact.
 
 ## Map compatibility
 
 `office-cozy.png` is the expanded starter tileset; `office-cozy@4x.png` has identical pixels at 4x. `office.png` and `office@4x.png` preserve the original eight tile IDs so existing persisted layouts get refreshed art without changing collision, positions or desk assignments. The renderer adds separate monitor sprites to those legacy desk tiles. Importing the new starter map adds its lounge, coffee corner, desk kits and surface metadata.
 
-The 32px world grid and avatar collision footprint remain unchanged. Tile art, desk surfaces and call zones have separate responsibilities. Custom tilesets can omit a 4x sibling; the renderer falls back to the declared PNG.
+The 32px world grid and avatar collision footprint remain unchanged. Only floors, walls and the structural collision mask are tile layers. Rugs, desks, tables, seating, plants, lamps and other furniture are objects containing one or more atlas cells, so a multi-cell piece moves and rotates as one unit. Solid decor contributes its transformed footprint to authoritative collision. The editor converts persisted expanded maps that still contain `rug` and `furniture` tile layers. Custom tilesets can omit a 4x sibling; the renderer falls back to the declared PNG.
 
 Early expanded maps also named `office.png`, but declare 40 tiles in eight columns. The renderer resolves that combination to `office-cozy.png` (including its native-resolution fallback), preserving their saved tile IDs and layout without a database import.

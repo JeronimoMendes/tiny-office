@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { inviteSchema, profileSchema, statusSchema } from '@office/shared';
+import { canStand, inviteSchema, parseMap, profileSchema, statusSchema } from '@office/shared';
 import { equalSecret, hashSecret } from '../auth/secrets';
 import type { Store, Identity } from '../persistence/store';
 import type { World } from '../world/tick';
@@ -102,6 +102,49 @@ export function httpRoutes(
       workspace: world.workspace,
       members,
     };
+  });
+  app.get('/api/editor/workspaces', async (req) => {
+    await identity(req, true);
+    return {
+      workspaces: [
+        {
+          id: world.workspace.id,
+          name: world.workspace.name,
+          mapRevision: world.workspace.mapRevision,
+        },
+      ],
+    };
+  });
+  app.get('/api/editor/workspaces/:workspaceId', async (req) => {
+    const session = await identity(req, true);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(req.params);
+    if (workspaceId !== session.workspaceId)
+      throw Object.assign(new Error('Workspace not found'), { statusCode: 404 });
+    return { workspace: world.workspace };
+  });
+  app.put('/api/editor/workspaces/:workspaceId/map', async (req) => {
+    const session = await identity(req, true);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(req.params);
+    if (workspaceId !== session.workspaceId)
+      throw Object.assign(new Error('Workspace not found'), { statusCode: 404 });
+    const body = z
+      .object({ expectedRevision: z.string().length(64), map: z.unknown() })
+      .strict()
+      .parse(req.body);
+    try {
+      const map = parseMap(body.map);
+      if (!canStand(map, map.spawn.x, map.spawn.y)) throw new Error('Spawn must be walkable');
+    } catch (error) {
+      if (error instanceof z.ZodError) throw error;
+      throw Object.assign(error instanceof Error ? error : new Error('Invalid map'), {
+        statusCode: 400,
+      });
+    }
+    await world.flush();
+    await store.updateMap(workspaceId, body.expectedRevision, body.map);
+    const workspace = await store.workspace(workspaceId);
+    world.applyWorkspaceMap(workspace);
+    return { workspace };
   });
   app.post('/api/invites', async (req) => {
     await identity(req, true);

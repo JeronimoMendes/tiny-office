@@ -253,9 +253,75 @@ for zid, name, left, _ in ROOMS:
 for n, (x, y) in enumerate(PODS):
     zone(f'desk-{n + 1}', f'Desk {n + 1}', 'desk', x - 1, y - 1, 5, 4)
 
+# Floors and walls stay on the structural grid. Rugs and furniture become
+# independently movable/rotatable objects, including multi-cell pieces.
+decor = []
+def decor_object(name, x, y, columns, data, cells, transfer_collision=True):
+    solid = transfer_collision and any(collision[cell] for cell in cells)
+    if transfer_collision:
+        for cell in cells:
+            collision[cell] = 0
+    desk_id = next((f'desk-{index + 1}' for index, pod in enumerate(PODS) if name == 'Large desk' and pod == (x, y)), None)
+    decor.append({
+        'id': 1000 + len(decor), 'name': name, 'x': x * 32, 'y': y * 32,
+        'width': columns * 32, 'height': len(data) // columns * 32,
+        'rotation': 0, 'visible': True,
+        'properties': [
+            {'name': 'tileData', 'type': 'string', 'value': json.dumps(data)},
+            {'name': 'columns', 'type': 'int', 'value': columns},
+            {'name': 'solid', 'type': 'bool', 'value': solid},
+        ] + ([{'name': 'deskId', 'type': 'string', 'value': desk_id}] if desk_id else []),
+    })
+
+for cell in range(len(rugs)):
+    if not rugs[cell]:
+        continue
+    component = {cell}
+    pending = [cell]
+    while pending:
+        current = pending.pop()
+        column = current % W
+        neighbors = [current - W, current + W]
+        if column > 0:
+            neighbors.append(current - 1)
+        if column + 1 < W:
+            neighbors.append(current + 1)
+        for neighbor in neighbors:
+            if 0 <= neighbor < len(rugs) and rugs[neighbor] and neighbor not in component:
+                component.add(neighbor)
+                pending.append(neighbor)
+    cells = list(component)
+    min_x = min(index % W for index in cells)
+    max_x = max(index % W for index in cells)
+    min_y = min(index // W for index in cells)
+    max_y = max(index // W for index in cells)
+    columns = max_x - min_x + 1
+    data = [
+        rugs[row * W + column]
+        for row in range(min_y, max_y + 1)
+        for column in range(min_x, max_x + 1)
+    ]
+    decor_object('Rug', min_x, min_y, columns, data, cells, False)
+    for index in cells:
+        rugs[index] = 0
+
+multi = {
+    GID['desk.0']: ('Large desk', 2), GID['couch.0']: ('Couch', 2),
+    GID['table.0']: ('Large table', 2), GID['counter.0']: ('Counter', 2),
+}
+for cell in range(len(furniture)):
+    gid = furniture[cell]
+    if gid < GID['desk.0']:
+        continue
+    name, columns = multi.get(gid, (next((key for key, value in GID.items() if value == gid), 'Decor'), 1))
+    cells = [cell + offset for offset in range(columns)]
+    decor_object(name, cell % W, cell // W, columns, [furniture[index] for index in cells], cells)
+    for index in cells:
+        furniture[index] = 0
+
 layers = []
 for n, (name, data) in enumerate(
-    [('floor', floor), ('rug', rugs), ('furniture', furniture), ('collision', collision)]
+    [('floor', floor), ('structure', furniture), ('collision', collision)]
 ):
     layers.append(
         {
@@ -271,6 +337,17 @@ for n, (name, data) in enumerate(
             'data': data,
         }
     )
+layers.append(
+    {
+        'id': 4,
+        'name': 'decor',
+        'type': 'objectgroup',
+        'draworder': 'topdown',
+        'opacity': 1,
+        'visible': True,
+        'objects': decor,
+    }
+)
 layers.append(
     {
         'id': 5,
@@ -359,7 +436,7 @@ map_data = {
     'version': '1.10',
     'tiledversion': '1.11.2',
     'nextlayerid': 9,
-    'nextobjectid': 400,
+    'nextobjectid': 2000,
     'tilesets': [
         {
             'firstgid': 1,

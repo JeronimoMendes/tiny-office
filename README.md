@@ -111,9 +111,13 @@ Back up the DB, plus your `maps/` and `assets/` sources. Example:
 docker compose exec -T db pg_dump -U office office > office-backup.sql
 ```
 
-## Edit the office in Tiled
+## Edit the office
 
-Open **`maps/office.tmj`** in [Tiled](https://www.mapeditor.org/). No application code change is needed for a different layout.
+Workspace owners can open **Manage office → Edit workspace map** to use the built-in admin-only editor. Select the workspace, then paint, erase or move structural floor/wall tiles; edit the collision layer; drag, resize, add or remove desks and meeting rooms; and place objects either on the whole map or as items belonging to a specific desk. Selected spaces have eight on-map resize handles as well as exact width/height fields. Spaces can be copied and pasted with their enclosed furniture and small items (`Cmd/Ctrl+C` and `Cmd/Ctrl+V` work too). Enable **Multi-select objects** or hold Shift to build an object selection; dragging any selected object moves the entire group, and rotate/delete applies to the group. Rugs, desks, tables, chairs, plants, lamps and other decor are independent objects above the structural grid. Multi-tile furniture moves and rotates as one object. Moving a desk or room space carries every decor object and small item whose center is inside that space; moving one furniture object never pulls nearby items along with it. Legacy tile-based furniture is converted to objects when its map is first opened in the editor. Changes remain a local draft until **Save workspace** is pressed.
+
+Saving creates a validated map revision and reloads connected clients. Existing people and desk assignments are retained by stable desk IDs. Saved positions are retained when they remain walkable; a person is moved to spawn only when the edited map makes their old position invalid. Concurrent edits are rejected instead of overwriting a newer revision. Only the workspace owner can read or save through the editor API.
+
+For source-controlled maps or more advanced editing, open **`maps/office.tmj`** in [Tiled](https://www.mapeditor.org/). No application code change is needed for a different layout.
 
 Supported, intentionally small Tiled subset:
 

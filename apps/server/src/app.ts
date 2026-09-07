@@ -22,7 +22,11 @@ export async function createApp(
     mediaService?: MediaRoomService;
   },
 ) {
-  const app = Fastify({ logger: options.logger ?? true, bodyLimit: 16384, requestTimeout: 10000 });
+  const app = Fastify({
+    logger: options.logger ?? true,
+    bodyLimit: 10_000_000,
+    requestTimeout: 10000,
+  });
   await app.register(cookie);
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
   const world = new World(

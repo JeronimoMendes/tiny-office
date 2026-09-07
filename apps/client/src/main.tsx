@@ -18,6 +18,9 @@ import './ui/styles.css';
 const MediaControls = lazy(() =>
   import('./ui/Media').then((module) => ({ default: module.MediaControls })),
 );
+const MapEditor = lazy(() =>
+  import('./ui/MapEditor').then((module) => ({ default: module.MapEditor })),
+);
 const WhiteboardDialog = lazy(() =>
   import('./ui/Whiteboard').then((module) => ({ default: module.WhiteboardDialog })),
 );
@@ -71,7 +74,14 @@ function App() {
       setLoading(false);
     }
   }
-  if (info) return <Office info={info} />;
+  if (info)
+    return location.pathname === '/editor' ? (
+      <Suspense fallback={<main className="editor-loading">Loading map editor…</main>}>
+        <MapEditor info={info} />
+      </Suspense>
+    ) : (
+      <Office info={info} />
+    );
   return (
     <main className="entry">
       <div className="entry-art" aria-hidden="true">
@@ -388,7 +398,14 @@ function Office({ info }: { info: SessionInfo }) {
             <strong>Room to settle in.</strong>
             <p>Walk into a desk or meeting room to join its private conversation.</p>
           </div>
-          {view.user.role === 'owner' && <OwnerPanel view={view} />}
+          {view.user.role === 'owner' && (
+            <>
+              <OwnerPanel view={view} />
+              <a className="editor-link" href="/editor">
+                Edit workspace map
+              </a>
+            </>
+          )}
           <button className="text-button signout" onClick={logout}>
             Sign out
           </button>

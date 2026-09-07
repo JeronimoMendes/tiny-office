@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   heading,
   appearanceFrames,
+  decorObjects,
   appearanceLayers,
   presetAppearance,
   parseMap,
@@ -133,6 +134,7 @@ export class OfficeScene extends Phaser.Scene {
           .createLayer(layer.name, tiles)
           ?.setScale(1 / scale)
           .setDepth(depth++);
+    this.decorateTiles(parsed.tiled, scale);
     this.decorate(parsed.tiled);
     for (const zone of parsed.zones) {
       const outline = this.add.graphics().setDepth(DEPTH.zones);
@@ -195,6 +197,37 @@ export class OfficeScene extends Phaser.Scene {
       owner ? `${owner.displayName}'s desk` : available ? `✦ Available · ${zone.name}` : zone.name,
     );
   }
+  private decorateTiles(tiled: TiledMap, scale: number) {
+    const columns = tiled.tilesets[0].columns;
+    for (const object of decorObjects(tiled)) {
+      const centerX = object.x + object.width / 2;
+      const centerY = object.y + object.height / 2;
+      const radians = (object.rotation * Math.PI) / 180;
+      const cosine = Math.cos(radians);
+      const sine = Math.sin(radians);
+      object.data.forEach((gid, index) => {
+        if (!gid) return;
+        const frame = gid - 1;
+        const localX = -object.width / 2 + (index % object.columns) * 32 + 16;
+        const localY = -object.height / 2 + Math.floor(index / object.columns) * 32 + 16;
+        this.add
+          .image(
+            centerX + localX * cosine - localY * sine,
+            centerY + localX * sine + localY * cosine,
+            'office-tiles',
+          )
+          .setCrop(
+            (frame % columns) * 32 * scale,
+            Math.floor(frame / columns) * 32 * scale,
+            32 * scale,
+            32 * scale,
+          )
+          .setDisplaySize(32, 32)
+          .setAngle(object.rotation)
+          .setDepth(DEPTH.props - 1 + (object.y + object.height) / 10000);
+      });
+    }
+  }
   // Desk props live in the map as points, so a workspace can be dressed — and
   // later personalised — without redrawing a tile.
   private decorate(tiled: TiledMap) {
@@ -232,6 +265,7 @@ export class OfficeScene extends Phaser.Scene {
         .image(object.x, object.y, 'props', frame)
         .setOrigin(manifest.anchor[0], manifest.anchor[1])
         .setScale(1 / manifest.scale)
+        .setAngle(object.rotation)
         .setDepth(DEPTH.props + object.y / 10000)
         .setAlpha(layer.opacity);
     }

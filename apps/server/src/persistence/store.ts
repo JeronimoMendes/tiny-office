@@ -91,6 +91,22 @@ export class Store {
       return this.saveMap(db, id, input);
     });
   }
+  async updateMap(id: string, expectedRevision: string, input: unknown) {
+    return this.transaction(async (db) => {
+      const current = await db.query('SELECT map_revision FROM workspaces WHERE id=$1 FOR UPDATE', [
+        id,
+      ]);
+      if (!current.rows[0]) throw new Error('Workspace does not exist');
+      if (current.rows[0].map_revision !== expectedRevision)
+        throw Object.assign(
+          new Error('The workspace changed since you loaded it. Reload before saving.'),
+          {
+            statusCode: 409,
+          },
+        );
+      return this.saveMap(db, id, input);
+    });
+  }
   async workspace(id: string): Promise<Workspace> {
     const { rows } = await this.pool.query(
       'SELECT w.id,w.name,w.map_revision AS "mapRevision", m.definition AS map FROM workspaces w JOIN workspace_maps m ON m.workspace_id=w.id AND m.revision=w.map_revision WHERE w.id=$1',
