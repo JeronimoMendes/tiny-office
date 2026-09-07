@@ -226,6 +226,13 @@ export function httpRoutes(
     await refresh();
     return { ok: true };
   });
+  app.delete('/api/desks/mine', async (req) => {
+    const session = await identity(req);
+    if (!(await store.releaseDesk(world.workspace.id, session.userId)))
+      throw Object.assign(new Error('You have no desk to leave'), { statusCode: 409 });
+    await refresh();
+    return { ok: true };
+  });
   app.post('/api/desks/:zoneId/claim', async (req) => {
     const session = await identity(req);
     const { zoneId } = z.object({ zoneId: z.string() }).parse(req.params);

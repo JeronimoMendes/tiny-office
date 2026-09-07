@@ -319,6 +319,13 @@ export class Store {
       return true;
     });
   }
+  async releaseDesk(workspaceId: string, userId: string): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      'DELETE FROM desk_assignments WHERE workspace_id=$1 AND user_id=$2',
+      [workspaceId, userId],
+    );
+    return Boolean(rowCount);
+  }
   async savePositions(workspaceId: string, positions: SavedPosition[]) {
     if (!positions.length) return;
     await this.pool.query(

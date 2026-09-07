@@ -25,6 +25,9 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   browser,
   baseURL,
 }) => {
+  // One office, two browsers and an SFU on a single runner: this walks, calls,
+  // changes availability twice, reloads and rejoins before it is done.
+  test.setTimeout(300_000);
   if (process.env.E2E_ALLOW_BOOTSTRAP !== '1')
     throw new Error(
       'Use an isolated empty office and set E2E_ALLOW_BOOTSTRAP=1. This test claims its workspace.',

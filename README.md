@@ -18,7 +18,7 @@ Open **http://localhost:3000**. The app prints a **bootstrap secret** in its sta
 1. Open **Manage office** in the participants panel.
 2. Enter a coworker's email and name and create a sign-in link.
 3. Send that link privately to that person. It works **once** and expires after **24 hours**. With `SMTP_URL` and `MAIL_FROM` set it is emailed for you, and anyone who loses their session can request a fresh one from the entry screen instead of asking you.
-4. Members can claim an available desk by walking into its highlighted zone and accepting the prompt. Their “Pick a desk” to-do disappears once they have one. The owner can still swap or clear any assignment with the desk dropdowns; each person can own one desk and anyone may enter it.
+4. Members can claim an available desk by walking into its highlighted zone and accepting the prompt. Their “Pick a desk” to-do disappears once they have one, and the participants panel names their desk with a **Leave desk** button that hands it back to the office so they can walk into another one. The owner can still swap or clear any assignment with the desk dropdowns; each person can own one desk and anyone may enter it.
 5. Use **WASD / arrow keys** to walk. Click your name in the bottom bar to edit your name and character. Mix head shapes, full-body skin tones, hairstyles, shirts, pants and shoes, with independent hair/clothing colors and a four-direction preview; save to update your character for everyone. Collapse the people panel for more map space.
 6. Walk to the whiteboard at the top of a meeting room and press **Space** to start a shared tldraw canvas. Everyone in that room sees a live preview and can click it to draw with you. The board lasts until its final editor closes it or leaves the room.
 
