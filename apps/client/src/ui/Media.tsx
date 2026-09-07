@@ -12,6 +12,7 @@ import {
 } from 'livekit-client';
 import type { Status } from '@office/shared';
 import { api } from '../session/session';
+import { callRows } from './media-layout';
 import {
   AVAILABLE_MEDIA_IDLE_MS,
   shouldPauseAvailableMedia,
@@ -65,6 +66,9 @@ export function MediaControls({
   hasPeerInZone: boolean;
 }) {
   const [room, setRoom] = useState<Room | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const expandButton = useRef<HTMLButtonElement>(null);
   const [mic, setMic] = useState(false);
   const [camera, setCamera] = useState(false);
   const [message, setMessage] = useState('');
@@ -75,6 +79,57 @@ export function MediaControls({
   const roomRef = useRef<Room | null>(null);
   const published = useRef(new Map<Track.Source, LocalTrack>());
   const pending = useRef(new Set<Track.Source>());
+
+  // Keep the same media elements mounted: changing the layout must not
+  // reconnect the call, republish tracks, or interrupt playback.
+  useEffect(() => {
+    const element = dialog.current!;
+    if (element.matches(':modal') === expanded) return;
+    element.close();
+    if (expanded) {
+      element.showModal();
+      expandButton.current?.focus();
+    } else {
+      element.show();
+      expandButton.current?.focus();
+    }
+  }, [expanded]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const container = media.current!;
+    const tiles = () => Array.from(container.querySelectorAll<HTMLElement>('.media-tile'));
+    const layout = () => {
+      const videos = tiles();
+      const gap = parseFloat(getComputedStyle(container).gap);
+      const rows = callRows(videos.length, container.clientWidth, container.clientHeight, gap);
+      let index = 0;
+      for (const columns of rows) {
+        for (let column = 0; column < columns; column++) {
+          const tile = videos[index++]!;
+          tile.style.width = `calc((100% - ${gap * (columns - 1)}px) / ${columns})`;
+          tile.style.height = `calc((100% - ${gap * (rows.length - 1)}px) / ${rows.length})`;
+        }
+      }
+    };
+    const resize = new ResizeObserver(layout);
+    const tracks = new MutationObserver(layout);
+    resize.observe(container);
+    tracks.observe(container, { childList: true });
+    layout();
+    return () => {
+      resize.disconnect();
+      tracks.disconnect();
+      for (const tile of tiles()) {
+        tile.style.removeProperty('width');
+        tile.style.removeProperty('height');
+      }
+    };
+  }, [expanded]);
+
+  useEffect(() => {
+    if (!room || !hasPeerInZone) setExpanded(false);
+  }, [room, hasPeerInZone]);
 
   useEffect(() => {
     const visibilityChanged = () => setPageVisible(!document.hidden);
@@ -251,29 +306,64 @@ export function MediaControls({
   }, [room, status, hasPeerInZone, pageVisible]);
 
   return (
-    <div className="media-controls">
+    <dialog
+      open
+      ref={dialog}
+      className={`media-controls${expanded ? ' media-expanded' : ''}`}
+      role={expanded ? 'dialog' : 'group'}
+      aria-label={expanded ? 'Focused call' : 'Call controls'}
+      aria-modal={expanded || undefined}
+      onCancel={(event) => {
+        event.preventDefault();
+        setExpanded(false);
+      }}
+    >
+      <h2 hidden={!expanded}>Zone conversation</h2>
       <div className="media-tracks" ref={media} aria-label="Conversation media" />
-      <button
-        className="media-toggle"
-        disabled={!room}
-        aria-label={mic ? 'Mute' : 'Mic'}
-        aria-pressed={mic}
-        title={mic ? 'Turn off microphone' : 'Turn on microphone'}
-        onClick={() => void setMicrophone(!mic)}
-      >
-        <MicrophoneIcon enabled={mic} />
-      </button>
-      <button
-        className="media-toggle"
-        disabled={!room}
-        aria-label={camera ? 'Stop video' : 'Video'}
-        aria-pressed={camera}
-        title={camera ? 'Turn off video' : 'Turn on video'}
-        onClick={() => void setVideo(!camera)}
-      >
-        <ScreenIcon enabled={camera} />
-      </button>
-      <small>{message}</small>
-    </div>
+      <div className="media-actions">
+        <button
+          className="media-toggle"
+          disabled={!room}
+          aria-label={mic ? 'Mute' : 'Mic'}
+          aria-pressed={mic}
+          title={mic ? 'Turn off microphone' : 'Turn on microphone'}
+          onClick={() => void setMicrophone(!mic)}
+        >
+          <MicrophoneIcon enabled={mic} />
+        </button>
+        <button
+          className="media-toggle"
+          disabled={!room}
+          aria-label={camera ? 'Stop video' : 'Video'}
+          aria-pressed={camera}
+          title={camera ? 'Turn off video' : 'Turn on video'}
+          onClick={() => void setVideo(!camera)}
+        >
+          <ScreenIcon enabled={camera} />
+        </button>
+        {room && hasPeerInZone && (
+          <button
+            ref={expandButton}
+            className="media-toggle"
+            disabled={!room}
+            aria-label={expanded ? 'Back to map' : 'Expand call'}
+            aria-expanded={expanded}
+            title={expanded ? 'Back to map (Esc)' : 'Expand call'}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d={
+                  expanded
+                    ? 'M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4'
+                    : 'M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5'
+                }
+              />
+            </svg>
+          </button>
+        )}
+        <small role="status">{message}</small>
+      </div>
+    </dialog>
   );
 }

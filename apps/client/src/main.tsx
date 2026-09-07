@@ -248,7 +248,7 @@ function Office({ info }: { info: SessionInfo }) {
         whiteboardOpen ||
         !nearWhiteboard ||
         !meetingZone ||
-        target.closest('input,textarea,select,[contenteditable],dialog')
+        target.closest('input,textarea,select,[contenteditable],dialog:modal')
       )
         return;
       event.preventDefault();
