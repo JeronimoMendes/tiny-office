@@ -19,6 +19,8 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
     // Capture Phaser only inside the browser fixture; production exposes no
     // testing API. Measure actual displayed positions, not server coordinates.
     if (variant === 'cozy') {
+      // This variant also traces motion and walks the whole wardrobe.
+      test.slow();
       await page.addInitScript(() => {
         const browser = window as typeof window & { officeTestGame?: import('phaser').Game };
         let phaser: typeof import('phaser');
