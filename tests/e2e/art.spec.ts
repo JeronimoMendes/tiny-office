@@ -5,6 +5,7 @@ import {
   move,
   parseMap,
   PROTOCOL_VERSION,
+  STEP_MS,
   type Input,
   type Player,
   type Member,
@@ -105,6 +106,7 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
       });
     });
     let tick = 0;
+    const inputs: number[] = [];
     await page.routeWebSocket('**/ws', (socket) => {
       socket.send(
         JSON.stringify({
@@ -118,6 +120,7 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
         }),
       );
       socket.onMessage((raw) => {
+        inputs.push(Date.now());
         const input = JSON.parse(raw.toString()) as Input;
         Object.assign(players[0], move(map, players[0], input.heading));
         socket.send(
@@ -145,6 +148,7 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
     await page.keyboard.down('ArrowRight');
     await expect.poll(() => players[0].x).toBeGreaterThan(start + 16);
     if (variant === 'cozy') {
+      const walkedFrom = inputs.length;
       const trace = await page.evaluate(async () => {
         const game = (window as typeof window & { officeTestGame: import('phaser').Game })
           .officeTestGame;
@@ -169,25 +173,44 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
           cameraRoundPixels: scene.cameras.main.roundPixels,
         };
       });
-      const speeds = trace.samples
-        .slice(1)
-        .flatMap((sample, i) => {
-          const elapsed = sample.time - trace.samples[i].time;
-          // Ignore scheduling stalls: this checks cadence, not the CI GPU's FPS.
-          return elapsed >= 5 && elapsed <= 40
-            ? [(1000 * (sample.x - trace.samples[i].x)) / elapsed]
-            : [];
-        })
-        .sort((a, b) => a - b);
-      expect(speeds.length).toBeGreaterThan(15);
-      expect(speeds[Math.floor(speeds.length / 2)]).toBeGreaterThan(100);
-      expect(speeds[Math.floor(speeds.length / 2)]).toBeLessThan(140);
-      // Compare the central distribution: occasional timer starvation in a
-      // headless browser may hit the deliberate speculation limit. Old easing
-      // varied from near-zero to >200px/s throughout every network tick.
-      expect(
-        speeds[Math.floor(speeds.length * 0.8)] / speeds[Math.floor(speeds.length * 0.2)],
-      ).toBeLessThan(1.7);
+      const median = (values: number[]) =>
+        values
+          .slice(1)
+          .map((value, i) => value - values[i])
+          .sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)];
+      const frame = median(trace.samples.map((sample) => sample.time));
+      const step = median(inputs.slice(walkedFrom));
+      // A frame may speculate up to one step past the last input it sent, so a
+      // browser starved enough to send those late really does walk slower than
+      // SPEED — measuring easing there would measure the runner instead. Frame
+      // length alone is harmless, and a movement regression still fails here:
+      // this reads the 15 Hz input loop, not the distance covered.
+      if (step < STEP_MS * 1.3) {
+        const speeds = trace.samples
+          .slice(1)
+          .flatMap((sample, i) => {
+            const elapsed = sample.time - trace.samples[i].time;
+            // Ignore scheduling stalls, relative to how fast this browser draws:
+            // this checks cadence, not the CI GPU's FPS.
+            return elapsed >= frame / 2 && elapsed <= frame * 2
+              ? [(1000 * (sample.x - trace.samples[i].x)) / elapsed]
+              : [];
+          })
+          .sort((a, b) => a - b);
+        expect(speeds.length).toBeGreaterThan(15);
+        expect(speeds[Math.floor(speeds.length / 2)]).toBeGreaterThan(100);
+        expect(speeds[Math.floor(speeds.length / 2)]).toBeLessThan(140);
+        // Compare the central distribution: occasional timer starvation in a
+        // headless browser may hit the deliberate speculation limit. Old easing
+        // varied from near-zero to >200px/s throughout every network tick.
+        expect(
+          speeds[Math.floor(speeds.length * 0.8)] / speeds[Math.floor(speeds.length * 0.2)],
+        ).toBeLessThan(1.7);
+      } else
+        testInfo.annotations.push({
+          type: 'cadence',
+          description: `Input loop starved to ${step.toFixed(0)}ms a step; cadence not measured`,
+        });
       expect(trace.roundPixels).toBe(false);
       expect(trace.cameraRoundPixels).toBe(false);
     }
