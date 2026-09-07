@@ -12,6 +12,7 @@ import { parseMap, type SessionInfo } from '@office/shared';
 import { OfficeSession, api } from './session/session';
 import { mountOffice } from './game/mount';
 import { OwnerPanel, ProfileDialog } from './ui/Account';
+import { CustomStatusControl } from './ui/CustomStatus';
 import { Avatar } from './ui/Avatar';
 import './ui/styles.css';
 
@@ -248,7 +249,7 @@ function Office({ info }: { info: SessionInfo }) {
         whiteboardOpen ||
         !nearWhiteboard ||
         !meetingZone ||
-        target.closest('input,textarea,select,[contenteditable],dialog')
+        target.closest('input,textarea,select,button,[contenteditable],dialog,[role="dialog"]')
       )
         return;
       event.preventDefault();
@@ -445,6 +446,12 @@ function Office({ info }: { info: SessionInfo }) {
                         {member.id === view.user.id && <small> (you)</small>}
                       </strong>
                       <span>{player ? zoneName(player.zoneId) : 'Away from office'}</span>
+                      {member.customStatus?.text && (
+                        <span className="custom-status-copy" title={member.customStatus.text}>
+                          {member.customStatus.emoji && `${member.customStatus.emoji} `}
+                          {member.customStatus.text}
+                        </span>
+                      )}
                     </div>
                     <span
                       title={player ? member.status : 'Offline'}
@@ -494,6 +501,10 @@ function Office({ info }: { info: SessionInfo }) {
             <span className="edit-glyph">✎</span>
           </button>
           <span className="control-divider" />
+          <CustomStatusControl
+            value={view.user.customStatus}
+            onSaved={() => mapRef.current?.focus({ preventScroll: true })}
+          />
           <label className="availability">
             <span className={`status-dot ${view.user.status}`} />
             <select
