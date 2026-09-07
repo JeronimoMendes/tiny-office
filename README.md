@@ -82,7 +82,7 @@ Browsers only grant microphone and camera access on a secure origin, so any depl
    ```
 
 3. Give both services a domain: `https://office.example.com` on `app` (port 3000) and `https://livekit.example.com` on `livekit` (port 7880). They must match `APP_ORIGIN` and `LIVEKIT_WS_URL` exactly, host for host. Coolify issues the certificates and its proxy passes WebSocket upgrades through, so `/ws` and LiveKit signaling need no extra configuration.
-4. Open `7881/tcp` and `7882/udp` on the server firewall and any cloud security group. The proxy does not carry media; LiveKit publishes these itself and discovers the public address through `use_external_ip` in [deploy/livekit.coolify.yaml](deploy/livekit.coolify.yaml).
+4. Open `7881/tcp` and `7882/udp` on the server firewall and any cloud security group. The proxy does not carry media; LiveKit publishes these itself and discovers the public address through `use_external_ip` in [deploy/livekit.coolify.yaml](deploy/livekit.coolify.yaml). That config is baked into a small image ([deploy/livekit.Dockerfile](deploy/livekit.Dockerfile)): Coolify runs the stack outside the repository clone, and a bind-mounted config resolves to a path Docker replaces with an empty directory, which LiveKit reports as `read /etc/livekit/livekit.yaml: is a directory`.
 5. Deploy, then read the app logs for the bootstrap secret and claim ownership at `APP_ORIGIN`. Leave `BOOTSTRAP_SECRET` unset to get a fresh one per unclaimed boot.
 
 Coolify's terminal on the `app` service runs the operator commands: `npm run auth:owner-link` for owner recovery, `npm run map:import -- maps/office.tmj` after a map change. The `office-data` volume survives redeploys; deleting the resource with volumes deletes the office and accounts.
