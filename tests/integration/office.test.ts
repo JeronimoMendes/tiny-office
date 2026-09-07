@@ -103,6 +103,61 @@ it('requires the bootstrap secret and protects origin, then claims the owner onc
   expect(session.json().user.role).toBe('owner');
 });
 
+it('persists, broadcasts and clears custom status without changing availability', async () => {
+  const before = (await store.members(id)).find((member) => member.id === ownerId)!;
+  const customStatus = { text: 'Writing docs', emoji: '📝' };
+  const response = await office.app.inject({
+    method: 'PATCH',
+    url: '/api/custom-status',
+    headers: headers(),
+    payload: customStatus,
+  });
+  expect(response.statusCode).toBe(200);
+  expect((await store.members(id)).find((member) => member.id === ownerId)).toMatchObject({
+    customStatus,
+    status: before.status,
+  });
+  const session = await office.app.inject({ url: '/api/session', headers: headers() });
+  expect(session.json().user.customStatus).toEqual(customStatus);
+  expect(
+    session.json().members.find((member: { id: string }) => member.id === ownerId).customStatus,
+  ).toEqual(customStatus);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/custom-status',
+        headers: { origin },
+        payload: customStatus,
+      })
+    ).statusCode,
+  ).toBe(401);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/custom-status',
+        headers: headers(),
+        payload: { text: 'x'.repeat(101), emoji: null },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/custom-status',
+        headers: headers(),
+        payload: { text: '', emoji: null },
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect((await store.members(id)).find((member) => member.id === ownerId)).toMatchObject({
+    customStatus: null,
+    status: before.status,
+  });
+});
+
 it('atomically redeems personal links once and enforces owner/member permissions', async () => {
   const response = await office.app.inject({
     method: 'POST',

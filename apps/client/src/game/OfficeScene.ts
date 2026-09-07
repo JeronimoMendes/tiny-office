@@ -285,7 +285,7 @@ export class OfficeScene extends Phaser.Scene {
     const target = event.target as HTMLElement;
     if (
       document.querySelector('.whiteboard-dialog') ||
-      target.closest('input,textarea,select,[contenteditable],dialog') ||
+      target.closest('input,textarea,select,button,[contenteditable],dialog,[role="dialog"]') ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey
