@@ -159,17 +159,11 @@ docker compose up -d app
 
 `maps/` and `assets/` are bind-mounted read-only, so map/art editing needs no image rebuild. The importer refuses to run if an authoritative server still owns that workspace. A valid import creates a new DB revision. Existing stable desk IDs retain assignments; removing/changing a desk zone removes its assignment. Invalid imports leave the active map untouched. Old revisions remain in the database. Clients reconnect with a full snapshot of the new map.
 
-To regenerate the pixel artwork (Python standard library only; preserves your map):
+The pixel artwork in `assets/` is checked in, not generated: the sheets are the source. Draw new pieces as pixel art and edit the sheets directly. Existing eight-tile maps continue to use a compatible `office.png`; new maps use `office-cozy.png`.
 
-```sh
-python3 tools/generate-assets.py
-```
+The eight character presets have registered head, hair, clothing, shoe, accessory and hat layers. Desks have clean surfaces, with 19 separate prop sprites placed at pixel coordinates. Artwork conventions and the future customization path are in [assets/ART.md](assets/ART.md). The character editor composes independent layers in both the preview and the walking avatar. It offers four heads, six skin tones, nine hairstyles, eight shirts, six bottoms and four shoe styles, plus palette choices, accessories, hats and eight starter outfits. Choices persist in PostgreSQL and broadcast to the office; existing character numbers resolve to their starter outfits. Dragging desk items remains a future feature.
 
-Add `--map` to also replace `maps/office.tmj` with the furnished starter office. Import that map explicitly using the workflow above to update an existing workspace's layout. Existing eight-tile maps continue to use a compatible, refreshed `office.png`; new maps use `office-cozy.png`.
-
-The eight character presets have registered head, hair, clothing, shoe, accessory and hat layers. Desks have clean surfaces, with 18 separate prop sprites placed at pixel coordinates. Artwork conventions and the future customization path are in [assets/ART.md](assets/ART.md). The character editor composes independent layers in both the preview and the walking avatar. It offers four heads, six skin tones, nine hairstyles, eight shirts, six bottoms and four shoe styles, plus palette choices, accessories, hats and eight starter outfits. Choices persist in PostgreSQL and broadcast to the office; existing character numbers resolve to their starter outfits. Dragging desk items remains a future feature.
-
-No third-party artwork is included. Generated artwork is CC0; see [assets/LICENSE.md](assets/LICENSE.md).
+No third-party artwork is included. The artwork is CC0; see [assets/LICENSE.md](assets/LICENSE.md).
 
 ## Develop
 

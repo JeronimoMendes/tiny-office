@@ -44,6 +44,7 @@ const setProperty = (object: EditorObject, name: string, value: string | number 
 };
 const decorChoices: DecorChoice[] = [
   { name: 'rug', label: 'Large rug', gid: 10, width: 3, height: 3 },
+  { name: 'cat-rug', label: 'Cat rug', gid: 37, width: 2, height: 2 },
   { name: 'desk', label: 'Large desk', gid: 19, width: 2, solid: true },
   { name: 'couch', label: 'Couch', gid: 21, width: 2, solid: true },
   { name: 'table', label: 'Large table', gid: 23, width: 2, solid: true },
