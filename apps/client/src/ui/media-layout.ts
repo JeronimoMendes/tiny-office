@@ -23,3 +23,20 @@ export function callRows(count: number, width: number, height: number, gap: numb
   }
   return best;
 }
+
+export type PinnedLayout = { stage: number; strip: { width: number; height: number } };
+
+/** A pinned screen keeps the panel; the faces ride under it in one short strip. */
+export function pinnedLayout(
+  count: number,
+  width: number,
+  height: number,
+  gap: number,
+): PinnedLayout {
+  const empty = { width: 0, height: 0 };
+  if (width <= 0 || height <= 0) return { stage: 0, strip: empty };
+  if (count <= 0) return { stage: height, strip: empty };
+  const fits = ((width - gap * (count - 1)) / count) * (10 / 16);
+  const tile = Math.max(Math.min(height * 0.15, 120, fits), 0);
+  return { stage: height - gap - tile, strip: { width: tile * (16 / 10), height: tile } };
+}

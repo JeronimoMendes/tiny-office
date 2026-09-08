@@ -30,6 +30,7 @@ export interface MediaRoomService {
 const sources = (policy: ReturnType<typeof mediaPolicy>) => [
   ...(policy.canPublishMicrophone ? [TrackSource.MICROPHONE] : []),
   ...(policy.canPublishCamera ? [TrackSource.CAMERA] : []),
+  ...(policy.canPublishScreen ? [TrackSource.SCREEN_SHARE] : []),
 ];
 
 export class LiveKitMedia {
