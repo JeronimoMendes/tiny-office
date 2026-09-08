@@ -853,6 +853,15 @@ form .primary {
   box-sizing: border-box;
   font-size: 13px;
 }
+.media-expanded .media-tracks.media-staged {
+  justify-content: center;
+}
+.media-expanded .media-pinned {
+  order: -1;
+}
+.media-expanded .media-screen[aria-pressed='true'] video {
+  border-color: #d7c196a0;
+}
 .media-expanded .media-actions {
   flex-shrink: 0;
 }
@@ -914,6 +923,18 @@ form .primary {
   background: #1c2821;
   border: 1px solid #d3ddbc33;
   box-shadow: 0 6px 28px #1b251e70;
+}
+.media-tracks .media-screen {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.media-tracks .media-screen:focus-visible {
+  outline: 2px solid #d7c196;
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+.media-tracks .media-screen video {
+  object-fit: contain;
 }
 .media-name {
   max-width: 100%;

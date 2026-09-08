@@ -4,6 +4,7 @@ export type MediaPolicy = {
   eligible: boolean;
   canPublishMicrophone: boolean;
   canPublishCamera: boolean;
+  canPublishScreen: boolean;
   canReceive: boolean;
 };
 
@@ -15,6 +16,7 @@ export function mediaPolicy(player: Pick<Player, 'zoneId' | 'status'>): MediaPol
       eligible: false,
       canPublishMicrophone: false,
       canPublishCamera: false,
+      canPublishScreen: false,
       canReceive: false,
     };
   if (player.status === 'focus')
@@ -22,12 +24,14 @@ export function mediaPolicy(player: Pick<Player, 'zoneId' | 'status'>): MediaPol
       eligible: true,
       canPublishMicrophone: true,
       canPublishCamera: true,
+      canPublishScreen: true,
       canReceive: true,
     };
   return {
     eligible: true,
     canPublishMicrophone: true,
     canPublishCamera: true,
+    canPublishScreen: true,
     canReceive: true,
   };
 }

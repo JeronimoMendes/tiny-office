@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callRows } from '../../apps/client/src/ui/media-layout';
+import { callRows, pinnedLayout } from '../../apps/client/src/ui/media-layout';
 
 describe('expanded call layout', () => {
   it('gives four people a 2×2 grid rather than three across and an empty row', () => {
@@ -42,5 +42,33 @@ describe('expanded call layout', () => {
         }
       }
     }
+  });
+});
+
+describe('pinned screen layout', () => {
+  it('gives the screen the panel and leaves one strip of faces under it', () => {
+    const { stage, strip } = pinnedLayout(3, 1280, 720, 16);
+    expect(strip.height).toBeCloseTo(720 * 0.15);
+    expect(strip.width / strip.height).toBeCloseTo(16 / 10);
+    expect(stage + 16 + strip.height).toBeCloseTo(720);
+    expect(stage).toBeGreaterThan(strip.height * 5);
+  });
+
+  it('shrinks the faces rather than wrapping them onto a second strip', () => {
+    for (const count of [1, 2, 5, 9, 16]) {
+      const { stage, strip } = pinnedLayout(count, 1280, 720, 16);
+      expect(strip.width * count + 16 * (count - 1)).toBeLessThanOrEqual(1280);
+      expect(stage + 16 + strip.height).toBeCloseTo(720);
+      expect(stage).toBeGreaterThan(0);
+    }
+  });
+
+  it('caps the strip so a tall panel does not spend half its height on faces', () => {
+    expect(pinnedLayout(2, 1280, 2000, 16).strip.height).toBe(120);
+  });
+
+  it('hands the whole panel to a screen shared with nobody on camera', () => {
+    expect(pinnedLayout(0, 1280, 720, 16)).toEqual({ stage: 720, strip: { width: 0, height: 0 } });
+    expect(pinnedLayout(2, 0, 0, 16)).toEqual({ stage: 0, strip: { width: 0, height: 0 } });
   });
 });

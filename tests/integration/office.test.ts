@@ -709,7 +709,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
       canPublish: true,
       canSubscribe: true,
       canPublishData: false,
-      canPublishSources: ['microphone', 'camera'],
+      canPublishSources: ['microphone', 'camera', 'screen_share'],
     });
     // Conversations are isolated: another zone is a different room entirely.
     expect((await token(cara)).room).toBe(`workspace-${id}-zone-cedar`);
@@ -723,7 +723,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
       canPublish: true,
       canSubscribe: true,
       canPublishData: false,
-      canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
+      canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA, TrackSource.SCREEN_SHARE],
     };
     sfu.join(desk, alice.id, inZone);
     sfu.join(desk, bob.id, inZone);
@@ -737,7 +737,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
       room: desk,
       canPublish: true,
       canSubscribe: true,
-      canPublishSources: ['microphone', 'camera'],
+      canPublishSources: ['microphone', 'camera', 'screen_share'],
     });
 
     // DND is excluded from media entirely: removed from the room and refused a

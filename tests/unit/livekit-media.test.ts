@@ -55,7 +55,11 @@ class FakeService implements MediaRoomService {
 const participant = (
   identity: string,
   canSubscribe: boolean,
-  canPublishSources: TrackSource[] = [TrackSource.MICROPHONE, TrackSource.CAMERA],
+  canPublishSources: TrackSource[] = [
+    TrackSource.MICROPHONE,
+    TrackSource.CAMERA,
+    TrackSource.SCREEN_SHARE,
+  ],
 ) =>
   ({
     identity,
@@ -149,7 +153,11 @@ describe('LiveKit authoritative reconciliation', () => {
             canSubscribe: true,
             canPublish: true,
             canPublishData: false,
-            canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
+            canPublishSources: [
+              TrackSource.MICROPHONE,
+              TrackSource.CAMERA,
+              TrackSource.SCREEN_SHARE,
+            ],
           },
         },
       },

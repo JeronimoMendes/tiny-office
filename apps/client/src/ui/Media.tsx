@@ -6,13 +6,14 @@ import {
   RoomEvent,
   Track,
   type LocalTrack,
+  type LocalTrackPublication,
   type RemoteTrack,
   type RemoteTrackPublication,
   type RemoteParticipant,
 } from 'livekit-client';
 import type { Status } from '@office/shared';
 import { api } from '../session/session';
-import { callRows } from './media-layout';
+import { callRows, pinnedLayout } from './media-layout';
 import {
   AVAILABLE_MEDIA_IDLE_MS,
   shouldPauseAvailableMedia,
@@ -20,14 +21,19 @@ import {
 } from './media-presence';
 
 /** Names every camera so a face in the strip maps to a person in the room. */
-function tile(video: HTMLMediaElement, name: string) {
+function tile(video: HTMLMediaElement, name: string, screen = false) {
   if (video instanceof HTMLVideoElement) video.playsInline = true;
   const wrapper = document.createElement('div');
-  wrapper.className = 'media-tile';
+  wrapper.className = `media-tile${screen ? ' media-screen' : ''}`;
   const label = document.createElement('span');
   label.className = 'media-name';
-  label.textContent = name;
+  label.textContent = screen ? `${name} · screen` : name;
   wrapper.append(video, label);
+  // A shared screen is what people want to look at, so it doubles as a button.
+  if (screen) {
+    wrapper.tabIndex = 0;
+    wrapper.setAttribute('role', 'button');
+  }
   return wrapper;
 }
 
@@ -67,10 +73,15 @@ export function MediaControls({
 }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [pinned, setPinned] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
   const [mic, setMic] = useState(false);
   const [camera, setCamera] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [sharePending, setSharePending] = useState(false);
+  const shareOperation = useRef<Room | null>(null);
+  const canShare = !!navigator.mediaDevices?.getDisplayMedia;
   const [message, setMessage] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
@@ -102,6 +113,27 @@ export function MediaControls({
     const layout = () => {
       const videos = tiles();
       const gap = parseFloat(getComputedStyle(container).gap);
+      const stage = videos.find((tile) => tile.dataset.screen === pinned);
+      // A pinned share that stopped leaves nothing to stage: fall back to the grid.
+      if (pinned && !stage) return void setPinned(null);
+      container.classList.toggle('media-staged', !!stage);
+      for (const tile of videos) tile.classList.toggle('media-pinned', tile === stage);
+      if (stage) {
+        const faces = videos.filter((tile) => tile !== stage);
+        const { stage: height, strip } = pinnedLayout(
+          faces.length,
+          container.clientWidth,
+          container.clientHeight,
+          gap,
+        );
+        stage.style.width = '100%';
+        stage.style.height = `${height}px`;
+        for (const face of faces) {
+          face.style.width = `${strip.width}px`;
+          face.style.height = `${strip.height}px`;
+        }
+        return;
+      }
       const rows = callRows(videos.length, container.clientWidth, container.clientHeight, gap);
       let index = 0;
       for (const columns of rows) {
@@ -120,12 +152,58 @@ export function MediaControls({
     return () => {
       resize.disconnect();
       tracks.disconnect();
+      container.classList.remove('media-staged');
       for (const tile of tiles()) {
+        tile.classList.remove('media-pinned');
         tile.style.removeProperty('width');
         tile.style.removeProperty('height');
       }
     };
-  }, [expanded]);
+  }, [expanded, pinned]);
+
+  // A shared screen is the reason to look at a call: clicking one from the map
+  // opens the focused view on it, and clicking it there pins or releases it.
+  useEffect(() => {
+    const container = media.current!;
+    const describe = () => {
+      for (const screen of container.querySelectorAll<HTMLElement>('.media-screen')) {
+        const staged = expanded && screen.dataset.screen === pinned;
+        screen.title = expanded
+          ? staged
+            ? 'Unpin screen'
+            : 'Pin screen'
+          : 'Open this screen in the call';
+        if (expanded) screen.setAttribute('aria-pressed', String(staged));
+        else screen.removeAttribute('aria-pressed');
+      }
+    };
+    const activate = (target: EventTarget | null) => {
+      const screen = (target as HTMLElement | null)?.closest<HTMLElement>('.media-screen');
+      if (!screen) return;
+      const key = screen.dataset.screen!;
+      if (expanded) return setPinned((current) => (current === key ? null : key));
+      if (!hasPeerInZone) return;
+      setPinned(key);
+      setExpanded(true);
+    };
+    const clicked = (event: MouseEvent) => activate(event.target);
+    const pressed = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (!(event.target as HTMLElement).classList.contains('media-screen')) return;
+      event.preventDefault();
+      activate(event.target);
+    };
+    const tiles = new MutationObserver(describe);
+    tiles.observe(container, { childList: true });
+    container.addEventListener('click', clicked);
+    container.addEventListener('keydown', pressed);
+    describe();
+    return () => {
+      tiles.disconnect();
+      container.removeEventListener('click', clicked);
+      container.removeEventListener('keydown', pressed);
+    };
+  }, [expanded, pinned, hasPeerInZone]);
 
   useEffect(() => {
     if (!room || !hasPeerInZone) setExpanded(false);
@@ -144,6 +222,10 @@ export function MediaControls({
     setRoom(null);
     setMic(false);
     setCamera(false);
+    setSharing(false);
+    setSharePending(false);
+    shareOperation.current = null;
+    setPinned(null);
     setIdlePaused(false);
     if (!connected || !zoneId || status === 'do-not-disturb') {
       setMessage(
@@ -168,16 +250,41 @@ export function MediaControls({
       element.autoplay = true;
       const node =
         element instanceof HTMLVideoElement
-          ? tile(element, participant.name || participant.identity)
+          ? tile(
+              element,
+              participant.name || participant.identity,
+              publication.source === Track.Source.ScreenShare,
+            )
           : element;
       node.dataset.participant = participant.identity;
       node.dataset.track = publication.trackSid;
+      if (publication.source === Track.Source.ScreenShare)
+        node.dataset.screen = publication.trackSid;
       media.current?.append(node);
     };
     const detach = (track: RemoteTrack, publication: RemoteTrackPublication) => {
       track.detach();
       drop(`[data-track="${publication.trackSid}"]`);
     };
+    next.on(RoomEvent.LocalTrackPublished, (publication: LocalTrackPublication) => {
+      if (publication.source !== Track.Source.ScreenShare || !publication.track || cancelled)
+        return;
+      const element = publication.track.attach();
+      element.muted = true;
+      const node = tile(element, `${next.localParticipant.name || displayName} (you)`, true);
+      node.dataset.localScreen = 'true';
+      node.dataset.screen = 'local';
+      media.current?.append(node);
+      setSharing(true);
+      setMessage('Sharing your screen');
+    });
+    next.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
+      if (publication.source !== Track.Source.ScreenShare) return;
+      publication.track?.detach();
+      drop('[data-local-screen]');
+      setSharing(false);
+      setMessage('Screen sharing stopped');
+    });
     next.on(RoomEvent.TrackSubscribed, attach);
     next.on(RoomEvent.TrackUnsubscribed, detach);
     next.on(RoomEvent.TrackUnpublished, (publication: RemoteTrackPublication) =>
@@ -225,6 +332,8 @@ export function MediaControls({
   useEffect(() => {
     const label = media.current?.querySelector('[data-local] .media-name');
     if (label) label.textContent = `${displayName} (you)`;
+    const screenLabel = media.current?.querySelector('[data-local-screen] .media-name');
+    if (screenLabel) screenLabel.textContent = `${displayName} (you) · screen`;
   }, [displayName]);
 
   async function setMicrophone(enabled: boolean) {
@@ -280,6 +389,37 @@ export function MediaControls({
       setMessage((error as Error).message);
     } finally {
       pending.current.delete(source);
+    }
+  }
+
+  async function toggleScreenShare() {
+    const activeRoom = roomRef.current;
+    if (!activeRoom || shareOperation.current) return;
+    shareOperation.current = activeRoom;
+    setSharePending(true);
+    try {
+      // Screen capture is always an explicit user action, never presence-driven.
+      await activeRoom.localParticipant.setScreenShareEnabled(
+        !activeRoom.localParticipant.isScreenShareEnabled,
+        { audio: false },
+      );
+      // The picker may outlive the conversation that opened it.
+      if (roomRef.current !== activeRoom) {
+        await activeRoom.localParticipant.setScreenShareEnabled(false);
+      }
+    } catch (error) {
+      if (roomRef.current === activeRoom) {
+        setMessage(
+          error instanceof Error && error.name === 'NotAllowedError'
+            ? 'Screen sharing cancelled or permission denied'
+            : `Screen sharing failed: ${(error as Error).message}`,
+        );
+      }
+    } finally {
+      if (shareOperation.current === activeRoom) {
+        shareOperation.current = null;
+        setSharePending(false);
+      }
     }
   }
 
@@ -340,6 +480,24 @@ export function MediaControls({
           onClick={() => void setVideo(!camera)}
         >
           <ScreenIcon enabled={camera} />
+        </button>
+        <button
+          className="media-toggle"
+          disabled={!room || !canShare || sharePending}
+          aria-label={sharing ? 'Stop sharing' : 'Share screen'}
+          aria-pressed={sharing}
+          title={
+            !canShare
+              ? 'Screen sharing is not supported in this browser'
+              : sharing
+                ? 'Stop sharing screen'
+                : 'Share screen'
+          }
+          onClick={() => void toggleScreenShare()}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 17H3V4h18v13h-5M12 21V10M8 14l4-4 4 4" />
+          </svg>
         </button>
         {room && hasPeerInZone && (
           <button
