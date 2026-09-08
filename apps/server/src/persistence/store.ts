@@ -5,6 +5,7 @@ import {
   canStand,
   parseMap,
   type Appearance,
+  type CustomStatus,
   type DeskAssignments,
   type Member,
   type TiledMap,
@@ -22,7 +23,7 @@ export type Identity = {
   expiresAt: Date;
 };
 const memberColumns =
-  'u.id, u.email, u.display_name AS "displayName", u.character, u.appearance, m.role, m.status, m.x, m.y';
+  'u.id, u.email, u.display_name AS "displayName", u.character, u.appearance, m.role, m.status, m.custom_status AS "customStatus", m.x, m.y';
 
 export const LOGIN_TOKEN_HOURS = 24;
 // An owner-issued invite is the one live link for that member and retires the
@@ -83,11 +84,16 @@ export class Store {
         await db.query('INSERT INTO schema_migrations VALUES (3)');
       }
       if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 4')).rowCount) {
+        await db.query('ALTER TABLE memberships ADD COLUMN custom_status jsonb');
+        await db.query('INSERT INTO schema_migrations VALUES (4)');
+      }
+      if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 5')).rowCount) {
+        await db.query('ALTER TABLE memberships ADD COLUMN IF NOT EXISTS custom_status jsonb');
         await db.query(
           `UPDATE users SET appearance = appearance || '{"beard":0}'::jsonb
            WHERE appearance IS NOT NULL`,
         );
-        await db.query('INSERT INTO schema_migrations VALUES (4)');
+        await db.query('INSERT INTO schema_migrations VALUES (5)');
       }
     });
   }
@@ -281,6 +287,12 @@ export class Store {
     await this.pool.query(
       'UPDATE users SET display_name=$2,character=$3,appearance=$4 WHERE id=$1',
       [userId, displayName, character, appearance ? JSON.stringify(appearance) : null],
+    );
+  }
+  async customStatus(workspaceId: string, userId: string, value: CustomStatus) {
+    await this.pool.query(
+      'UPDATE memberships SET custom_status=$3 WHERE workspace_id=$1 AND user_id=$2',
+      [workspaceId, userId, value.text ? JSON.stringify(value) : null],
     );
   }
   async status(workspaceId: string, userId: string, status: Member['status']) {

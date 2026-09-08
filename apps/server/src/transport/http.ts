@@ -1,6 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { canStand, inviteSchema, parseMap, profileSchema, statusSchema } from '@office/shared';
+import {
+  canStand,
+  customStatusSchema,
+  inviteSchema,
+  parseMap,
+  profileSchema,
+  statusSchema,
+} from '@office/shared';
 import { equalSecret, hashSecret } from '../auth/secrets';
 import { signInMail, type Mailer } from '../auth/mailer';
 import { LOGIN_TOKEN_HOURS, type Store, type Identity } from '../persistence/store';
@@ -198,6 +205,13 @@ export function httpRoutes(
     const session = await identity(req),
       body = profileSchema.parse(req.body);
     await store.profile(session.userId, body.displayName, body.character, body.appearance);
+    await refresh();
+    return { ok: true };
+  });
+  app.patch('/api/custom-status', async (req) => {
+    const session = await identity(req);
+    const body = customStatusSchema.parse(req.body);
+    await store.customStatus(world.workspace.id, session.userId, body);
     await refresh();
     return { ok: true };
   });

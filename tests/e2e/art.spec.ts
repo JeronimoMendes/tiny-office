@@ -282,9 +282,11 @@ for (const variant of ['cozy', 'legacy', 'native', 'expanded-v1', 'expanded-v1-n
       await page.screenshot({ path: testInfo.outputPath('mixed-wardrobe.png') });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: testInfo.outputPath('mobile-wardrobe.png') });
-      expect(await page.locator('dialog').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
-        true,
-      );
+      expect(
+        await page
+          .getByRole('dialog', { name: 'A little more you.' })
+          .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      ).toBe(true);
       failSave = true;
       await page.getByRole('button', { name: 'Save profile' }).click();
       await expect(page.getByRole('alert')).toContainText('Please try saving again.');

@@ -4,6 +4,23 @@ import type { TiledMap } from './map';
 import { headings, type Motion } from './movement';
 export const PROTOCOL_VERSION = 5;
 export const statusSchema = z.enum(['free', 'focus', 'do-not-disturb']);
+import { statusEmojis } from './status-emojis';
+export { statusEmojis, statusEmojiCatalog } from './status-emojis';
+const supportedStatusEmojis = new Set(statusEmojis);
+export const customStatusSchema = z
+  .object({
+    text: z.string().trim().max(100),
+    emoji: z
+      .string()
+      .max(32)
+      .refine((emoji) => supportedStatusEmojis.has(emoji), 'Choose an emoji from the picker.')
+      .nullable(),
+  })
+  .strict()
+  .refine((value) => value.text.length > 0 || value.emoji === null, {
+    message: 'Add status text or clear the emoji.',
+  });
+export type CustomStatus = z.infer<typeof customStatusSchema>;
 export const headingSchema = z.enum(
   Object.keys(headings) as [keyof typeof headings, ...(keyof typeof headings)[]],
 );
@@ -75,6 +92,7 @@ export type Member = {
   appearance?: Appearance | null;
   role: 'owner' | 'member';
   status: Status;
+  customStatus?: CustomStatus | null;
 };
 export type DeskAssignments = Record<string, string>;
 export type Workspace = {

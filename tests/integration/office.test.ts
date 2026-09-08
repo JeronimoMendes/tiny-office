@@ -103,6 +103,61 @@ it('requires the bootstrap secret and protects origin, then claims the owner onc
   expect(session.json().user.role).toBe('owner');
 });
 
+it('persists, broadcasts and clears custom status without changing availability', async () => {
+  const before = (await store.members(id)).find((member) => member.id === ownerId)!;
+  const customStatus = { text: 'Writing docs', emoji: '📝' };
+  const response = await office.app.inject({
+    method: 'PATCH',
+    url: '/api/custom-status',
+    headers: headers(),
+    payload: customStatus,
+  });
+  expect(response.statusCode).toBe(200);
+  expect((await store.members(id)).find((member) => member.id === ownerId)).toMatchObject({
+    customStatus,
+    status: before.status,
+  });
+  const session = await office.app.inject({ url: '/api/session', headers: headers() });
+  expect(session.json().user.customStatus).toEqual(customStatus);
+  expect(
+    session.json().members.find((member: { id: string }) => member.id === ownerId).customStatus,
+  ).toEqual(customStatus);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/custom-status',
+        headers: { origin },
+        payload: customStatus,
+      })
+    ).statusCode,
+  ).toBe(401);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/custom-status',
+        headers: headers(),
+        payload: { text: 'x'.repeat(101), emoji: null },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PATCH',
+        url: '/api/custom-status',
+        headers: headers(),
+        payload: { text: '', emoji: null },
+      })
+    ).statusCode,
+  ).toBe(200);
+  expect((await store.members(id)).find((member) => member.id === ownerId)).toMatchObject({
+    customStatus: null,
+    status: before.status,
+  });
+});
+
 it('atomically redeems personal links once and enforces owner/member permissions', async () => {
   const response = await office.app.inject({
     method: 'POST',
@@ -654,7 +709,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
       canPublish: true,
       canSubscribe: true,
       canPublishData: false,
-      canPublishSources: ['microphone', 'camera'],
+      canPublishSources: ['microphone', 'camera', 'screen_share'],
     });
     // Conversations are isolated: another zone is a different room entirely.
     expect((await token(cara)).room).toBe(`workspace-${id}-zone-cedar`);
@@ -668,7 +723,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
       canPublish: true,
       canSubscribe: true,
       canPublishData: false,
-      canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
+      canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA, TrackSource.SCREEN_SHARE],
     };
     sfu.join(desk, alice.id, inZone);
     sfu.join(desk, bob.id, inZone);
@@ -682,7 +737,7 @@ it('scopes media credentials to the authoritative zone and revokes them from the
       room: desk,
       canPublish: true,
       canSubscribe: true,
-      canPublishSources: ['microphone', 'camera'],
+      canPublishSources: ['microphone', 'camera', 'screen_share'],
     });
 
     // DND is excluded from media entirely: removed from the room and refused a

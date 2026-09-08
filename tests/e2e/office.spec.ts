@@ -66,6 +66,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await page.getByRole('button', { name: 'Create my office' }).click();
   await expect(page.getByTestId('connection')).toHaveText('1 here');
   await expect(page.locator('canvas')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expand call', exact: true })).toHaveCount(0);
   const owner = ((await (await page.request.get('/api/session')).json()) as SessionInfo).user;
   await page.getByText('Manage office').click();
   await page.getByLabel('Member email').fill('bob@example.test');
@@ -101,7 +102,10 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await expect(coworker.getByTestId(`person-${owner.id}`)).toContainText('Alice Oak');
 
   const start = ownerPlayers.get(owner.id)!;
-  await page.locator('.map-stage').click({ position: { x: 600, y: 450 } });
+  // Clicking UI must not require a second click on the map to resume walking.
+  await page.getByRole('button', { name: 'Hide participants', exact: true }).click();
+  await page.getByRole('button', { name: 'Show participants', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Hide participants', exact: true })).toBeFocused();
   await page.keyboard.down('ArrowRight');
   await expect.poll(() => coworkerPlayers.get(owner.id)?.x).toBeGreaterThan(start.x + 48);
   await ownerPlayers.releaseKeys('ArrowRight');
@@ -111,6 +115,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await ownerPlayers.releaseKeys('ArrowRight');
   await expect.poll(() => ownerPlayers.get(owner.id)?.moving).toBe(false);
   await expect(coworker.getByTestId(`person-${owner.id}`)).toContainText('Desk 7');
+  await expect(page.getByRole('button', { name: 'Expand call', exact: true })).toHaveCount(0);
   const saved = { ...ownerPlayers.get(owner.id)! };
   expect(saved.y).toBe(start.y);
 
@@ -129,6 +134,103 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   const ownerTile = coworker.locator(`.media-tile[data-participant="${owner.id}"]`);
   await expect(ownerTile.locator('video')).toHaveCount(1, { timeout: 10_000 });
   await expect(ownerTile.locator('.media-name')).toHaveText('Alice Oak');
+
+  // Expanding is local layout only: the same playing video grows to fill the
+  // call panel, leaving workspace edges visible. Keyboard movement is blocked,
+  // and Escape restores the strip.
+  const expand = coworker.getByRole('button', { name: 'Expand call', exact: true });
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  const video = await ownerTile.locator('video').elementHandle();
+  const compactBounds = await ownerTile.boundingBox();
+  await expand.click();
+  const focusedCall = coworker.getByRole('dialog', { name: 'Focused call' });
+  await expect(focusedCall).toBeVisible();
+  const callBounds = (await focusedCall.boundingBox())!;
+  const viewport = coworker.viewportSize()!;
+  expect(callBounds.x).toBeGreaterThan(0);
+  expect(callBounds.y).toBeGreaterThan(0);
+  expect(callBounds.x + callBounds.width).toBeLessThan(viewport.width);
+  expect(callBounds.y + callBounds.height).toBeLessThan(viewport.height);
+  await expect
+    .poll(async () => (await ownerTile.boundingBox())!.width)
+    .toBeGreaterThan(compactBounds!.width * 2);
+  expect(await video!.evaluate((element) => element.isConnected)).toBe(true);
+  await expect
+    .poll(() =>
+      ownerTile.locator('video').evaluate((element: HTMLVideoElement) => element.readyState),
+    )
+    .toBeGreaterThanOrEqual(2);
+  const callPosition = { ...coworkerPlayers.get(bob.id)! };
+  await coworker.keyboard.press('ArrowLeft');
+  await coworker.keyboard.press('Escape');
+  await expect(focusedCall).toHaveCount(0);
+  await expect(expand).toBeFocused();
+  expect(coworkerPlayers.get(bob.id)!.x).toBe(callPosition.x);
+  expect(await video!.evaluate((element) => element.isConnected)).toBe(true);
+  await expand.click();
+  await coworker.getByRole('button', { name: 'Back to map', exact: true }).click();
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+
+  // Stub only the native picker, sending a real video track through the SFU.
+  // Cancellation, camera independence, and the browser's Stop sharing action
+  // must all leave the call usable.
+  await page.evaluate(() => {
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      throw new DOMException('Picker cancelled', 'NotAllowedError');
+    };
+  });
+  await page.getByRole('button', { name: 'Share screen', exact: true }).click();
+  await expect(page.getByText('Screen sharing cancelled or permission denied')).toBeVisible();
+  await page.evaluate(() => {
+    navigator.mediaDevices.getDisplayMedia = async () =>
+      navigator.mediaDevices.getUserMedia({ video: true });
+  });
+  const screen = coworker.locator('.media-screen');
+  await page.getByRole('button', { name: 'Share screen', exact: true }).click();
+  await expect(screen.locator('video')).toHaveCount(1, { timeout: 10_000 });
+  await expect(screen.locator('.media-name')).toHaveText('Alice Oak · screen');
+  await expect(page.locator('[data-local-screen] video')).toHaveCount(1);
+
+  // A shared screen is its own way into the call: clicking it from the map opens
+  // the focused view with the screen staged and the faces small underneath it.
+  const ownerCamera = coworker.locator(
+    `.media-tile[data-participant="${owner.id}"]:not(.media-screen)`,
+  );
+  // The desk offer sits over the strip, so wave it off before reaching a tile.
+  await coworker.getByRole('button', { name: 'Not now' }).click();
+  await screen.click();
+  await expect(focusedCall).toBeVisible();
+  await expect(screen).toHaveAttribute('aria-pressed', 'true');
+  const stageBounds = (await screen.boundingBox())!;
+  const faceBounds = (await ownerCamera.boundingBox())!;
+  expect(stageBounds.height).toBeGreaterThan(faceBounds.height * 2);
+  expect(stageBounds.y + stageBounds.height).toBeLessThanOrEqual(faceBounds.y + 1);
+  // Unpinning shares the panel evenly again without dropping out of the call.
+  await screen.click();
+  await expect(screen).toHaveAttribute('aria-pressed', 'false');
+  await expect
+    .poll(async () => (await ownerCamera.boundingBox())!.height)
+    .toBeGreaterThan(faceBounds.height * 2);
+  await coworker.keyboard.press('Escape');
+  await expect(focusedCall).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Stop video', exact: true }).click();
+  await expect(page.locator('[data-local]')).toHaveCount(0);
+  await expect(screen).toHaveCount(1);
+  await page.getByRole('button', { name: 'Stop sharing', exact: true }).click();
+  await expect(screen).toHaveCount(0, { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Share screen', exact: true }).click();
+  await expect(screen).toHaveCount(1, { timeout: 10_000 });
+  await page.locator('[data-local-screen] video').evaluate((video: HTMLVideoElement) => {
+    const track = (video.srcObject as MediaStream).getVideoTracks()[0]!;
+    track.stop();
+    track.dispatchEvent(new Event('ended'));
+  });
+  await expect(page.getByRole('button', { name: 'Share screen', exact: true })).toBeEnabled();
+  await expect(page.locator('[data-local-screen]')).toHaveCount(0);
+  await expect(screen).toHaveCount(0, { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Video', exact: true }).click();
+  await expect(ownerTile).toHaveCount(1, { timeout: 10_000 });
 
   // Stopping video unpublishes instead of muting, so the peer's tile goes away
   // and restarting republishes into that same one rather than adding a second.
@@ -162,6 +264,7 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   // fresh credential even while the avatar remains in the call zone.
   await coworker.getByLabel('Availability').selectOption('do-not-disturb');
   await expect(coworker.getByText('Media off in DND')).toBeVisible();
+  await expect(expand).toHaveCount(0);
   await expect(page.locator(`audio[data-participant="${bob.id}"]`)).toHaveCount(0, {
     timeout: 10_000,
   });
@@ -183,6 +286,8 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await expect.poll(() => coworkerPlayers.get(bob.id)?.zoneId).toBeNull();
   await coworkerPlayers.releaseKeys('ArrowLeft');
   await expect(coworker.getByText('Open floor is quiet')).toBeVisible();
+  await expect(expand).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Expand call', exact: true })).toHaveCount(0);
   await expect(page.locator(`.media-tile[data-participant="${bob.id}"] video`)).toHaveCount(0, {
     timeout: 10_000,
   });

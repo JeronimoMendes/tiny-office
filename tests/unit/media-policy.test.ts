@@ -14,6 +14,7 @@ describe('media policy', () => {
       eligible: false,
       canPublishMicrophone: false,
       canPublishCamera: false,
+      canPublishScreen: false,
       canReceive: false,
     });
     expect(conversationRoom(workspace, player(null, 'free'))).toBeNull();
@@ -25,6 +26,7 @@ describe('media policy', () => {
       eligible: true,
       canPublishMicrophone: true,
       canPublishCamera: true,
+      canPublishScreen: true,
       canReceive: true,
     });
     expect(conversationRoom(workspace, player('cedar', 'focus'))).toBe(
