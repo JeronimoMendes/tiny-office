@@ -1,8 +1,13 @@
 import { parseMap, type TiledMap } from './map';
 
-type Item = NonNullable<TiledMap['layers'][number]['objects']>[number];
-export const itemProperty = (item: Item, name: string) =>
-  item.properties.find((p) => p.name === name)?.value;
+import {
+  itemLocalBounds,
+  itemPivot,
+  itemProperty,
+  propBounds,
+  spriteBounds,
+  type Item,
+} from './item-bounds';
 
 export function personalDesk(map: TiledMap, deskId: string) {
   return map.layers
@@ -13,16 +18,12 @@ export function personalDesk(map: TiledMap, deskId: string) {
 }
 
 // Test the rendered bounds, including rotation and the small-item sprite anchor.
-export function itemFitsDesk(item: Item, desk: Item, small: boolean) {
+export function itemFitsDesk(item: Item, desk: Item, small: boolean, map?: TiledMap) {
   const angle = (item.rotation * Math.PI) / 180;
   const c = Math.cos(angle),
     s = Math.sin(angle);
-  const width = small ? 32 : item.width,
-    height = small ? 32 : item.height;
-  const cx = small ? item.x : item.x + width / 2;
-  const cy = small ? item.y : item.y + height / 2;
-  const left = small ? -16 : -width / 2;
-  const top = small ? -32 * 0.82 : -height / 2;
+  const { x: left, y: top, width, height } = itemLocalBounds(item, small, map);
+  const { x: cx, y: cy } = itemPivot(item, small);
   return [left, left + width].every((x) =>
     [top, top + height].every((y) => {
       const px = cx + x * c - y * s,
@@ -37,31 +38,12 @@ export function itemFitsDesk(item: Item, desk: Item, small: boolean) {
   );
 }
 
-export function editableDeskItem(item: Item, desk: Item, small: boolean) {
+export function editableDeskItem(item: Item, desk: Item, small: boolean, map?: TiledMap) {
   const owner = itemProperty(item, 'deskId');
-  return (!owner || owner === itemProperty(desk, 'zoneId')) && itemFitsDesk(item, desk, small);
+  return (!owner || owner === itemProperty(desk, 'zoneId')) && itemFitsDesk(item, desk, small, map);
 }
 
-const smallItems = new Set([
-  'monitor',
-  'laptop',
-  'keyboard',
-  'mug',
-  'lamp',
-  'succulent',
-  'cactus',
-  'books',
-  'photo',
-  'notepad',
-  'pencils',
-  'headphones',
-  'cat',
-  'duck',
-  'trophy',
-  'speaker',
-  'stickies',
-  'terrarium',
-]);
+const smallItems = new Set(Object.keys(propBounds));
 // PostgreSQL jsonb does not preserve object key order.
 const canonical = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonical);
@@ -98,7 +80,7 @@ export function validateDeskEdit(before: TiledMap, input: unknown, deskId: strin
     const small = name === 'props';
     const oldItems = before.layers.find((l) => l.name === name)?.objects ?? [];
     const newItems = after.layers.find((l) => l.name === name)?.objects ?? [];
-    const locked = oldItems.filter((o) => !editableDeskItem(o, desk, small));
+    const locked = oldItems.filter((o) => !editableDeskItem(o, desk, small, before));
     if (
       !equal(
         locked,
@@ -109,13 +91,16 @@ export function validateDeskEdit(before: TiledMap, input: unknown, deskId: strin
     for (const item of newItems) {
       if (oldItems.some((o) => equal(o, item))) continue;
       if (
-        !editableDeskItem(item, desk, small) ||
+        !editableDeskItem(item, desk, small, before) ||
         new Set(item.properties.map((p) => p.name)).size !== item.properties.length
       )
         return deny();
       if (small) {
         if (!smallItems.has(String(itemProperty(item, 'prop'))) || item.width || item.height)
           return deny();
+      } else if (itemProperty(item, 'sprite') !== undefined) {
+        const sprite = spriteBounds[String(itemProperty(item, 'sprite'))];
+        if (!sprite || item.width !== sprite.width || item.height !== sprite.height) return deny();
       } else {
         const data = JSON.parse(String(itemProperty(item, 'tileData'))) as number[];
         const columns = Number(itemProperty(item, 'columns'));

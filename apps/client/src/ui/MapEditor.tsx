@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   editableDeskItem,
+  hitItem,
+  itemLocalBounds,
   personalDesk,
   validateDeskEdit,
   type SessionInfo,
@@ -443,7 +445,8 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
         if (isObjectSelected('decor', decorLayer?.objects?.indexOf(object) ?? -1)) {
           context.strokeStyle = '#fff3b0';
           context.lineWidth = 3;
-          context.strokeRect(-object.width / 2, -object.height / 2, object.width, object.height);
+          const bounds = itemLocalBounds(object, false, draft);
+          context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
         }
         context.restore();
       }
@@ -513,7 +516,12 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
       if (object) {
         context.strokeStyle = '#fff3b0';
         context.lineWidth = 2;
-        context.strokeRect(object.x - 17, object.y - 27, 34, 34);
+        const bounds = itemLocalBounds(object, true, draft);
+        context.save();
+        context.translate(object.x, object.y);
+        context.rotate((object.rotation * Math.PI) / 180);
+        context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        context.restore();
       }
     }
     if (selection?.type === 'tile') {
@@ -670,20 +678,13 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
   function hit(x: number, y: number): Selection {
     for (let index = (propsLayer?.objects?.length ?? 0) - 1; index >= 0; index--) {
       const object = propsLayer!.objects![index];
-      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, true))) continue;
-      if (Math.abs(x - object.x) < 18 && Math.abs(y - object.y + 10) < 20)
-        return { type: 'prop', index };
+      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, true, draft))) continue;
+      if (hitItem(object, true, x, y, draft)) return { type: 'prop', index };
     }
     for (let index = (decorLayer?.objects?.length ?? 0) - 1; index >= 0; index--) {
       const object = decorLayer!.objects![index];
-      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, false))) continue;
-      if (
-        x >= object.x &&
-        x <= object.x + object.width &&
-        y >= object.y &&
-        y <= object.y + object.height
-      )
-        return { type: 'decor', index };
+      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, false, draft))) continue;
+      if (hitItem(object, false, x, y, draft)) return { type: 'decor', index };
     }
     if (deskOnly) return null;
     for (let index = zones.length - 1; index >= 0; index--) {

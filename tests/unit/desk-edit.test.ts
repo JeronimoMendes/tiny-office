@@ -56,6 +56,25 @@ describe('desk-only edits', () => {
     items(moved, 'decor').pop();
     expect(() => validateDeskEdit(next, moved, deskId)).not.toThrow();
   });
+  it('supports the new hand-drawn sprites and MacBook prop from main', () => {
+    const next = structuredClone(source);
+    const macbook = small();
+    macbook.properties[0].value = 'macbook';
+    items(next).push(macbook);
+    items(next, 'decor').push({
+      ...small(),
+      id: 100001,
+      x: desk.x + 8,
+      y: desk.y + 8,
+      point: false,
+      width: 64,
+      height: 64,
+      properties: [{ name: 'sprite', value: 'cat-rug' }],
+    });
+    expect(() => validateDeskEdit(source, next, deskId)).not.toThrow();
+    items(next, 'decor').at(-1)!.properties[0].value = 'unknown-sprite';
+    expect(() => validateDeskEdit(source, next, deskId)).toThrow();
+  });
   it('rejects edits without a desk and all structural changes', () => {
     expect(() => validateDeskEdit(source, source, 'missing')).toThrow();
     const next = structuredClone(source);
@@ -111,7 +130,7 @@ describe('desk-only edits', () => {
     expect(() => validateDeskEdit(source, next, deskId)).toThrow();
   });
   it('checks rotated sprite corners, not just the anchor or center', () => {
-    const item = { ...small(), x: desk.x + 16, y: desk.y + 27 };
+    const item = { ...small(), x: desk.x + 7, y: desk.y + 16.24 };
     expect(itemFitsDesk(item, desk, true)).toBe(true);
     item.rotation = 45;
     expect(itemFitsDesk(item, desk, true)).toBe(false);
