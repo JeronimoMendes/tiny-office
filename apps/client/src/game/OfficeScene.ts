@@ -59,6 +59,7 @@ type Avatar = {
   label: Phaser.GameObjects.Text;
   shadow: Phaser.GameObjects.Ellipse;
   indicator: Phaser.GameObjects.Arc;
+  speakingRing: Phaser.GameObjects.Ellipse;
   samples: Sample[];
   target: Player;
   stride: number;
@@ -73,6 +74,7 @@ export class OfficeScene extends Phaser.Scene {
   private zoneOutlines = new Map<string, Phaser.GameObjects.Graphics>();
   private unsubscribe?: () => void;
   private keys = new Map<string, Direction>();
+  private reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private lastTick = -1;
   private renderTime = 0;
   private lastRevision: string;
@@ -360,6 +362,7 @@ export class OfficeScene extends Phaser.Scene {
         avatar.label.destroy();
         avatar.shadow.destroy();
         avatar.indicator.destroy();
+        avatar.speakingRing.destroy();
         this.avatars.delete(id);
       }
     for (const authoritative of snapshot.players) {
@@ -385,6 +388,11 @@ export class OfficeScene extends Phaser.Scene {
             .setScale(1 / LABEL),
           shadow: this.add.ellipse(player.x, player.y, 20, 8, 0x293c34, 0.22),
           indicator: this.add.circle(player.x, player.y - 38, 3, statusColors[player.status]),
+          speakingRing: this.add
+            .ellipse(player.x, player.y, 28, 12)
+            .setStrokeStyle(1.5, 0xb2c9aa)
+            .setAlpha(0)
+            .setVisible(false),
           samples: [],
           target: player,
           stride: 0,
@@ -409,7 +417,7 @@ export class OfficeScene extends Phaser.Scene {
     this.lastTick = snapshot.tick;
     for (const zone of this.zones) this.drawZone(zone);
   }
-  update() {
+  update(_time: number, delta: number) {
     const now = performance.now();
     // Packet jitter may pause interpolation, but must never rewind it.
     const renderTime = (this.renderTime = Math.max(
@@ -440,6 +448,22 @@ export class OfficeScene extends Phaser.Scene {
       const gait = moving ? [1, 0, 1, 2][Math.floor(avatar.stride / 15)] : 1;
       avatar.sprite.setPosition(x, y + 4).setDepth(10 + y);
       avatar.shadow.setPosition(x, y).setDepth(9 + y);
+      const speaking = this.bridge.isSpeaking(id);
+      // Frame-rate-independent easing: quick onset, softer release, no flashing.
+      const targetAlpha = speaking ? 0.65 : 0;
+      const alpha = this.reducedMotion.matches
+        ? targetAlpha
+        : Phaser.Math.Linear(
+            avatar.speakingRing.alpha,
+            targetAlpha,
+            1 - Math.exp(-delta / (speaking ? 90 : 180)),
+          );
+      avatar.speakingRing
+        .setPosition(x, y)
+        .setDepth(9.5 + y)
+        .setAlpha(alpha)
+        .setScale(this.reducedMotion.matches ? 1 : 0.92 + (alpha / 0.65) * 0.08)
+        .setVisible(alpha > 0.01);
       avatar.label.setPosition(x, y - 30).setDepth(10000);
       avatar.indicator.setPosition(x - avatar.label.displayWidth / 2 - 4, y - 38).setDepth(10001);
       const frame = directions.indexOf(direction) * 3 + gait;

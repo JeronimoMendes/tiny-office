@@ -40,6 +40,10 @@ export class OfficeSession {
   private tick = 0;
   private receivedAt = 0;
   private map;
+  private speaking = new Set<string>();
+  setSpeaking = (ids: string[]) => {
+    this.speaking = new Set(ids);
+  };
   readonly renderer: RendererBridge = {
     subscribe: (listener) => {
       this.renderListeners.add(listener);
@@ -53,6 +57,7 @@ export class OfficeSession {
       this.localMotion?.setHeading(this.heading, performance.now());
     },
     sampleSelf: (now) => this.localMotion?.sample(now) ?? null,
+    isSpeaking: (id) => this.speaking.has(id),
   };
   constructor(info: SessionInfo) {
     this.view = {

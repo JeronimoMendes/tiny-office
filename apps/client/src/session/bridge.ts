@@ -16,4 +16,5 @@ export interface RendererBridge {
   setHeading(heading: Heading | null): void;
   // Lightweight display-rate read: no world cloning or React updates per frame.
   sampleSelf(now: number): Motion | null;
+  isSpeaking(playerId: string): boolean;
 }
