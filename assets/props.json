@@ -18,84 +18,89 @@
       "frame": 1
     },
     {
+      "name": "macbook",
+      "label": "MacBook",
+      "frame": 2
+    },
+    {
       "name": "keyboard",
       "label": "Keyboard",
-      "frame": 2
+      "frame": 3
     },
     {
       "name": "mug",
       "label": "Mug",
-      "frame": 3
+      "frame": 4
     },
     {
       "name": "lamp",
       "label": "Desk lamp",
-      "frame": 4
+      "frame": 5
     },
     {
       "name": "succulent",
       "label": "Succulent",
-      "frame": 5
+      "frame": 6
     },
     {
       "name": "cactus",
       "label": "Cactus",
-      "frame": 6
+      "frame": 7
     },
     {
       "name": "books",
       "label": "Books",
-      "frame": 7
+      "frame": 8
     },
     {
       "name": "photo",
       "label": "Photo frame",
-      "frame": 8
+      "frame": 9
     },
     {
       "name": "notepad",
       "label": "Notepad",
-      "frame": 9
+      "frame": 10
     },
     {
       "name": "pencils",
       "label": "Pencil cup",
-      "frame": 10
+      "frame": 11
     },
     {
       "name": "headphones",
       "label": "Headphones",
-      "frame": 11
+      "frame": 12
     },
     {
       "name": "cat",
       "label": "Office cat",
-      "frame": 12
+      "frame": 13
     },
     {
       "name": "duck",
       "label": "Rubber duck",
-      "frame": 13
+      "frame": 14
     },
     {
       "name": "trophy",
       "label": "Trophy",
-      "frame": 14
+      "frame": 15
     },
     {
       "name": "speaker",
       "label": "Speaker",
-      "frame": 15
+      "frame": 16
     },
     {
       "name": "stickies",
       "label": "Sticky notes",
-      "frame": 16
+      "frame": 17
     },
     {
       "name": "terrarium",
       "label": "Terrarium",
-      "frame": 17
+      "frame": 18
     }
   ]
 }
