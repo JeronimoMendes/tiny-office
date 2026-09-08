@@ -90,4 +90,53 @@ describe('decor tile rendering', () => {
       }
     },
   );
+
+  it('draws hand-drawn decor as one sprite instead of atlas cells', () => {
+    const tiled = JSON.parse(readFileSync('maps/office.tmj', 'utf8')) as TiledMap;
+    tiled.layers = tiled.layers.filter((layer) => layer.name !== 'decor');
+    tiled.layers.push({
+      name: 'decor',
+      type: 'objectgroup',
+      x: 0,
+      y: 0,
+      offsetx: 0,
+      offsety: 0,
+      visible: true,
+      opacity: 1,
+      objects: [
+        {
+          id: 999,
+          name: 'Cat rug',
+          type: '',
+          x: 64,
+          y: 96,
+          width: 64,
+          height: 64,
+          rotation: 90,
+          properties: [
+            { name: 'sprite', type: 'string', value: 'cat-rug' },
+            { name: 'solid', type: 'bool', value: false },
+          ],
+        },
+      ],
+    });
+    const texture = { has: () => false, add: vi.fn() };
+    const image = vi.fn(() => ({
+      setDisplaySize: vi.fn().mockReturnThis(),
+      setAngle: vi.fn().mockReturnThis(),
+      setDepth: vi.fn().mockReturnThis(),
+    }));
+    const scene = Object.assign(Object.create(OfficeScene.prototype) as OfficeScene, {
+      textures: { get: () => texture },
+      add: { image },
+    });
+    scene['decorateTiles'](tiled, 4);
+    // One image at the object's centre, carved from no atlas frame at all.
+    expect(texture.add).not.toHaveBeenCalled();
+    expect(image).toHaveBeenCalledTimes(1);
+    expect(image).toHaveBeenCalledWith(96, 128, 'sprite-cat-rug');
+    const [{ value: sprite }] = image.mock.results;
+    expect(sprite.setDisplaySize).toHaveBeenCalledWith(64, 64);
+    expect(sprite.setAngle).toHaveBeenCalledWith(90);
+  });
 });

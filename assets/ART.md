@@ -2,7 +2,7 @@
 
 Original pixel art with warm oak, sage walls, terracotta pots and slate upholstery. Characters use a 24 × 32 pixel canvas and a restrained palette.
 
-The sheets in this directory are the source. They are checked in, not generated: nothing rebuilds them, so editing a sheet is how the art changes. New pieces are drawn as pixel art and composited into the sheet that carries them, at the registration the sections below describe.
+The art in this directory is the source. It is checked in, not generated: nothing rebuilds it, so editing a file is how the art changes. New pieces are drawn as pixel art and added to `sprites/`, where each one stays its own PNG and needs no packing — see Hand-drawn sprites. The existing sheets keep the registration the sections below describe.
 
 ## Characters
 
@@ -24,7 +24,11 @@ The built-in owner editor places these props off-grid and can associate them wit
 
 ## Hand-drawn sprites
 
-`sprites/` keeps each hand-drawn piece as its own PNG at world resolution — 32px to the tile, so a two-by-two piece is 64 × 64. These are the editable originals; the tileset carries a copy of their pixels, scaled 4x with nearest-neighbour into `office-cozy@4x.png` and at native size in `office-cozy.png`. `cat-rug.png` is the first, occupying tile IDs 37–40, which were blank cells at the end of the atlas — placing new pieces there keeps every existing tile ID stable. Changing one means editing both the sprite and the matching atlas cells.
+`sprites/` holds one PNG per hand-drawn piece at world resolution — 32px to the tile, so a two-by-two piece is 64 × 64. Nothing packs them into a sheet. A decor object names one in a `sprite` property instead of carrying `tileData`, and the renderer loads `/assets/sprites/<name>.png` and draws it over the object's rectangle, rotating and depth-sorting it exactly as tile-backed decor. The name is validated as a bare filename, since it becomes a URL.
+
+So adding a piece is: draw the PNG, drop it in `sprites/`, and give it an entry in the editor's `decorChoices` with `sprite` set instead of `gid`. Its size in tiles is whatever `width` and `height` say; the PNG is scaled to that rectangle, so draw it at exactly 32px per tile to keep the pixels square. `cat-rug.png` is the first of these.
+
+`office-cozy.png` also still carries a copy of the cat rug at tile IDs 37–40, from when it was packed into the atlas. Nothing references those cells now; they can go the next time that sheet is redrawn.
 
 ## Map compatibility
 
