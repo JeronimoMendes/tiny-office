@@ -8,7 +8,9 @@ const initial: Motion = { ...map.spawn, direction: 'down', moving: false };
 
 // Interleave the two clocks just as the browser does, including coincident ticks.
 function walk(fps: number, heading: 'right' | 'down-right' = 'right') {
-  const local = new LocalMotion(map, initial, 0);
+  // Speed tests need empty floor, independent of changes to authored furniture footprints.
+  const floor = { ...map, collision: map.collision.map(() => 0), itemColliders: [] };
+  const local = new LocalMotion(floor, initial, 0);
   local.setHeading(heading, 0);
   let fixed = initial;
   let tick = 1;
@@ -16,7 +18,7 @@ function walk(fps: number, heading: 'right' | 'down-right' = 'right') {
   for (let frame = 1; frame <= fps; frame++) {
     const now = (frame * 1000) / fps;
     while (tick * STEP_MS <= now + 1e-8) {
-      fixed = move(map, fixed, heading);
+      fixed = move(floor, fixed, heading);
       local.commit(fixed, tick++ * STEP_MS);
     }
     // A matching ack must not rewind the fractional progress or restart easing.
@@ -78,7 +80,7 @@ describe('display-rate local movement', () => {
   it.each([0, 10, 33, 60])(
     'holds still after a five-second walk released %ims into a tick',
     (phase) => {
-      const floor = { ...map, collision: map.collision.map(() => 0) };
+      const floor = { ...map, collision: map.collision.map(() => 0), itemColliders: [] };
       const local = new LocalMotion(floor, initial, 0);
       local.setHeading('right', 0);
       let fixed = initial;

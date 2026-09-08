@@ -1400,6 +1400,15 @@ kbd {
   background-color: #d6c98d2e;
   box-shadow: 0 0 0 1px #e3d69a55 inset;
 }
+.editor-sidebar label.editor-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-check input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
 .editor-help {
   display: block;
   line-height: 1.45;

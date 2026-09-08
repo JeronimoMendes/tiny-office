@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   editableDeskItem,
+  decorCatalog,
+  itemRenderDepth,
+  itemRenderSettings,
+  itemCollisionBounds,
+  type DecorAsset,
   hitItem,
   itemLocalBounds,
   personalDesk,
@@ -24,17 +29,7 @@ type SpaceClipboard = {
   decor: EditorObject[];
   props: EditorObject[];
 };
-type DecorChoice = {
-  name: string;
-  label: string;
-  // Tile-backed decor names its first GID; hand-drawn decor names a PNG in
-  // assets/sprites and is placed whole instead of assembled from cells.
-  gid?: number;
-  sprite?: string;
-  width: number;
-  height?: number;
-  solid?: boolean;
-};
+type DecorChoice = DecorAsset;
 type WorkspaceSummary = { id: string; name: string; mapRevision: string };
 type PropsManifest = {
   cell: number;
@@ -54,46 +49,7 @@ const setProperty = (object: EditorObject, name: string, value: string | number 
   if (existing) existing.value = value;
   else object.properties.push({ name, value });
 };
-const decorChoices: DecorChoice[] = [
-  { name: 'rug', label: 'Large rug', gid: 10, width: 3, height: 3 },
-  { name: 'cat-rug', label: 'Cat rug', sprite: 'cat-rug', width: 2, height: 2 },
-  { name: 'desk', label: 'Large desk', gid: 19, width: 2, solid: true },
-  { name: 'couch', label: 'Couch', gid: 21, width: 2, solid: true },
-  { name: 'table', label: 'Large table', gid: 23, width: 2, solid: true },
-  { name: 'counter', label: 'Counter', gid: 25, width: 2, solid: true },
-  { name: 'chair-up', label: 'Chair (up)', gid: 27, width: 1, solid: true },
-  { name: 'chair-down', label: 'Chair (down)', gid: 28, width: 1, solid: true },
-  { name: 'plant-tall', label: 'Tall flower pot', gid: 29, width: 1, solid: true },
-  { name: 'plant-small', label: 'Small flower pot', gid: 30, width: 1, solid: true },
-  {
-    name: 'monstera',
-    label: 'Monstera',
-    sprite: 'monstera',
-    width: 1,
-    height: 2,
-    solid: true,
-  },
-  {
-    name: 'ultrawide-monitor',
-    label: 'Ultrawide monitor',
-    sprite: 'ultrawide-monitor',
-    width: 2,
-    height: 1,
-  },
-  {
-    name: 'wind-turbine',
-    label: 'Wind turbine',
-    sprite: 'wind-turbine',
-    width: 1,
-    height: 2,
-  },
-  { name: 'bookshelf', label: 'Bookshelf', gid: 31, width: 1, solid: true },
-  { name: 'cabinet', label: 'Cabinet', gid: 32, width: 1, solid: true },
-  { name: 'cooler', label: 'Water cooler', gid: 33, width: 1, solid: true },
-  { name: 'stool', label: 'Stool', gid: 34, width: 1, solid: true },
-  { name: 'floor-lamp', label: 'Floor lamp', gid: 35, width: 1, solid: true },
-  { name: 'divider', label: 'Divider', gid: 36, width: 1, solid: true },
-];
+const decorChoices = decorCatalog;
 
 function normalizeDecor(input: TiledMap) {
   const map = clone(input);
@@ -274,6 +230,7 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
       : '',
   );
   const [zoom, setZoom] = useState(deskOnly ? 3 : 1);
+  const [showCollision, setShowCollision] = useState(false);
   const [invalidPlacement, setInvalidPlacement] = useState<Rect | null>(null);
   const [hasClipboard, setHasClipboard] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -311,6 +268,31 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
   );
   const zones = zonesLayer?.objects ?? [];
   const deskZones = zones.filter((zone) => property(zone, 'kind') === 'desk');
+  const orderedItems = [
+    ...(decorLayer?.objects ?? []).map((object, index) => ({
+      object,
+      index,
+      type: 'decor' as const,
+    })),
+    ...(propsLayer?.objects ?? []).map((object, index) => ({
+      object,
+      index,
+      type: 'prop' as const,
+    })),
+  ].sort(
+    (a, b) =>
+      itemRenderDepth(a.object, a.type === 'prop', draft) -
+      itemRenderDepth(b.object, b.type === 'prop', draft),
+  );
+  const selectedItem =
+    selection?.type === 'decor'
+      ? decorLayer?.objects?.[selection.index]
+      : selection?.type === 'prop'
+        ? propsLayer?.objects?.[selection.index]
+        : undefined;
+  const renderSettings = selectedItem
+    ? itemRenderSettings(selectedItem, selection?.type === 'prop', draft)
+    : undefined;
   const isObjectSelected = (type: SelectedObject['type'], index: number) =>
     selectedObjects.some((selected) => selected.type === type && selected.index === index);
 
@@ -411,7 +393,29 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
     }
     context.globalAlpha = 1;
     if (sheet) {
-      for (const object of decorLayer?.objects ?? []) {
+      for (const { object, type } of orderedItems) {
+        if (type === 'prop') {
+          const frame = manifest?.items.find(
+            (item) => item.name === property(object, 'prop'),
+          )?.frame;
+          if (frame === undefined || !manifest || !props.current) continue;
+          context.save();
+          context.translate(object.x, object.y);
+          context.rotate((object.rotation * Math.PI) / 180);
+          context.drawImage(
+            props.current,
+            (frame % manifest.columns) * manifest.cell,
+            Math.floor(frame / manifest.columns) * manifest.cell,
+            manifest.cell,
+            manifest.cell,
+            -manifest.anchor[0] * 32,
+            -manifest.anchor[1] * 32,
+            32,
+            32,
+          );
+          context.restore();
+          continue;
+        }
         const sprite = property(object, 'sprite');
         context.save();
         context.translate(object.x + object.width / 2, object.y + object.height / 2);
@@ -442,6 +446,26 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
             32,
           );
         });
+        if (showCollision) {
+          const box = itemCollisionBounds(object, draft);
+          if (box) {
+            context.fillStyle = '#ed665566';
+            context.strokeStyle = '#ff695e';
+            context.lineWidth = 1;
+            context.fillRect(
+              box.x - object.width / 2,
+              box.y - object.height / 2,
+              box.width,
+              box.height,
+            );
+            context.strokeRect(
+              box.x - object.width / 2,
+              box.y - object.height / 2,
+              box.width,
+              box.height,
+            );
+          }
+        }
         if (isObjectSelected('decor', decorLayer?.objects?.indexOf(object) ?? -1)) {
           context.strokeStyle = '#fff3b0';
           context.lineWidth = 3;
@@ -452,7 +476,7 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
       }
     }
     const collision = draft.layers.find((layer) => layer.name === 'collision');
-    if (layerName === 'collision') {
+    if (layerName === 'collision' || showCollision) {
       context.fillStyle = '#dc776855';
       collision?.data?.forEach((tile, index) => {
         if (tile)
@@ -463,28 +487,6 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
             32,
           );
       });
-    }
-    if (manifest && props.current) {
-      const byName = new Map(manifest.items.map((item) => [item.name, item.frame]));
-      for (const object of propsLayer?.objects ?? []) {
-        const frame = byName.get(String(property(object, 'prop')));
-        if (frame === undefined) continue;
-        context.save();
-        context.translate(object.x, object.y);
-        context.rotate((object.rotation * Math.PI) / 180);
-        context.drawImage(
-          props.current,
-          (frame % manifest.columns) * manifest.cell,
-          Math.floor(frame / manifest.columns) * manifest.cell,
-          manifest.cell,
-          manifest.cell,
-          -manifest.anchor[0] * 32,
-          -manifest.anchor[1] * 32,
-          32,
-          32,
-        );
-        context.restore();
-      }
     }
     zones.forEach((zone, index) => {
       const kind = String(property(zone, 'kind'));
@@ -676,15 +678,10 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
     };
   }
   function hit(x: number, y: number): Selection {
-    for (let index = (propsLayer?.objects?.length ?? 0) - 1; index >= 0; index--) {
-      const object = propsLayer!.objects![index];
-      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, true, draft))) continue;
-      if (hitItem(object, true, x, y, draft)) return { type: 'prop', index };
-    }
-    for (let index = (decorLayer?.objects?.length ?? 0) - 1; index >= 0; index--) {
-      const object = decorLayer!.objects![index];
-      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, false, draft))) continue;
-      if (hitItem(object, false, x, y, draft)) return { type: 'decor', index };
+    for (const { object, type, index } of [...orderedItems].reverse()) {
+      const small = type === 'prop';
+      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, small, draft))) continue;
+      if (hitItem(object, small, x, y, draft)) return { type, index };
     }
     if (deskOnly) return null;
     for (let index = zones.length - 1; index >= 0; index--) {
@@ -1255,6 +1252,16 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
       if (selected) selected[key] = candidate[key];
     });
   }
+  function updateRenderSetting(name: 'renderLayer' | 'renderOrder', value: string | number) {
+    mutate((map) => {
+      for (const selected of selectedObjects) {
+        const object = map.layers.find(
+          (l) => l.name === (selected.type === 'prop' ? 'props' : 'decor'),
+        )?.objects?.[selected.index];
+        if (object) setProperty(object, name, value);
+      }
+    });
+  }
   function rotateSelection(amount: number) {
     if (!selectedObjects.length) return;
     mutate((map) => {
@@ -1386,6 +1393,47 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
             {multiSelect ? '✓ Multi-select objects on' : 'Multi-select objects'}
           </button>
           <small className="editor-help">You can also hold Shift while selecting objects.</small>
+          <label>
+            Select item (including covered items)
+            <select
+              value={
+                selectedItem && selection && selection.type !== 'tile'
+                  ? `${selection.type}:${selection.index}`
+                  : ''
+              }
+              onChange={(event) => {
+                const item = orderedItems.find(
+                  (i) => `${i.type}:${i.index}` === event.target.value,
+                );
+                if (!item) return;
+                setSelection({ type: item.type, index: item.index });
+                setSelectedObjects([{ type: item.type, index: item.index }]);
+                setTool('select');
+              }}
+            >
+              <option value="">Choose an item…</option>
+              {[...orderedItems]
+                .reverse()
+                .filter(
+                  (i) =>
+                    !deskOnly ||
+                    (ownDesk && editableDeskItem(i.object, ownDesk, i.type === 'prop', draft)),
+                )
+                .map((i) => (
+                  <option key={`${i.type}:${i.index}`} value={`${i.type}:${i.index}`}>
+                    {i.object.name} · #{i.object.id}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className="editor-check">
+            <input
+              type="checkbox"
+              checked={showCollision}
+              onChange={(event) => setShowCollision(event.target.checked)}
+            />{' '}
+            Show collision footprints
+          </label>
         </section>
         {selection && selection.type !== 'zone' && (
           <div className="selected-object-actions">
@@ -1401,6 +1449,38 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
                 <button onClick={() => rotateSelection(-45)}>↶ 45°</button>
                 <button onClick={() => rotateSelection(45)}>↷ 45°</button>
               </div>
+            )}
+            {renderSettings && (
+              <>
+                <label>
+                  Render layer
+                  <select
+                    value={renderSettings.layer}
+                    onChange={(event) => updateRenderSetting('renderLayer', event.target.value)}
+                  >
+                    <option value="ground">Ground — rugs, behind items</option>
+                    <option value="furniture">Furniture</option>
+                    <option value="surface">Surface — on top of furniture</option>
+                  </select>
+                </label>
+                <label>
+                  Priority within layer
+                  <input
+                    type="number"
+                    min={-100}
+                    max={100}
+                    step={1}
+                    value={renderSettings.order}
+                    onChange={(event) =>
+                      updateRenderSetting(
+                        'renderOrder',
+                        Math.max(-100, Math.min(100, Math.round(Number(event.target.value) || 0))),
+                      )
+                    }
+                  />
+                </label>
+                <small>Higher priority draws in front. Applies to all selected items.</small>
+              </>
             )}
             <button className="danger" onClick={removeSelection}>
               Delete selected {selection.type === 'tile' ? 'tile' : 'object'}

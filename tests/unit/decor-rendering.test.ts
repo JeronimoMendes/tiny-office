@@ -138,5 +138,15 @@ describe('decor tile rendering', () => {
     const [{ value: sprite }] = image.mock.results;
     expect(sprite.setDisplaySize).toHaveBeenCalledWith(64, 64);
     expect(sprite.setAngle).toHaveBeenCalledWith(90);
+    expect(sprite.setDepth).toHaveBeenCalledWith(3 + 160 / 1e8);
+    const rug = tiled.layers.find((l) => l.name === 'decor')!.objects![0];
+    rug.properties.push(
+      { name: 'renderLayer', value: 'surface' },
+      { name: 'renderOrder', value: 10 },
+    );
+    scene['decorateTiles'](tiled, 4);
+    expect(image.mock.results.at(-1)!.value.setDepth).toHaveBeenCalledWith(
+      5 + 10 / 1000 + 160 / 1e8,
+    );
   });
 });
