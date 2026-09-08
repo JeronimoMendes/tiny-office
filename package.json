@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "assets:bounds": "tsx tools/item-bounds.ts",
     "map:import": "tsx apps/server/src/import-map.ts",
     "auth:owner-link": "tsx apps/server/src/owner-link.ts",
     "start": "node dist/server.js"

@@ -32,6 +32,23 @@ So adding a piece is: draw the PNG, drop it in `sprites/`, and give it an entry 
 
 `office-cozy.png` also still carries a copy of the cat rug at tile IDs 37–40, from when it was packed into the atlas. Nothing references those cells now; they can go the next time that sheet is redrawn.
 
+## Item bounds (post-processing)
+
+After editing a prop sheet or a PNG in `sprites/`, run `npm run assets:bounds`.
+This reads the finished artwork and writes `assets/item-bounds.json`; it never
+creates or modifies artwork. Commit the PNGs and refreshed metadata together.
+Export as non-interlaced 8-bit RGBA PNG. The script supports all PNG scanline
+filters and uses every pixel with nonzero alpha, including translucent shadows.
+
+The metadata records the smallest axis-aligned box around visible pixels in each
+prop frame, standalone sprite and built-in tileset cell. The desk editor uses
+these boxes for picking, selection outlines and placement limits, transforming
+them around the same anchor as the artwork when rotated. Client and server share
+the checked-in bounds; clients cannot supply their own smaller hitboxes. Unknown
+custom artwork conservatively retains its full rectangle. Sprite images and
+anchors are unchanged, as is player collision. Tests detect stale metadata after
+art changes.
+
 ## Map compatibility
 
 `office-cozy.png` is the expanded starter tileset; `office-cozy@4x.png` has identical pixels at 4x. `office.png` and `office@4x.png` preserve the original eight tile IDs so existing persisted layouts get refreshed art without changing collision, positions or desk assignments. The renderer adds separate monitor sprites to those legacy desk tiles. Importing the new starter map adds its lounge, coffee corner, desk kits and surface metadata.
