@@ -97,9 +97,9 @@ function App() {
     }
   }
   if (info)
-    return location.pathname === '/editor' ? (
+    return ['/editor', '/desk'].includes(location.pathname) ? (
       <Suspense fallback={<main className="editor-loading">Loading map editor…</main>}>
-        <MapEditor info={info} />
+        <MapEditor info={info} deskOnly={location.pathname === '/desk'} />
       </Suspense>
     ) : (
       <Office info={info} />
@@ -474,6 +474,9 @@ function Office({ info }: { info: SessionInfo }) {
                 <strong>Your desk</strong>
                 <small>{selfDesk.name}</small>
               </div>
+              <a className="button-link" href="/desk">
+                Edit desk
+              </a>
               <button disabled={deskBusy} onClick={() => void leaveDesk()}>
                 {deskBusy ? 'Leaving…' : 'Leave desk'}
               </button>

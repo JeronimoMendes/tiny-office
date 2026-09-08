@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { Pool, type PoolClient } from 'pg';
 import {
   canStand,
+  validateDeskEdit,
   parseMap,
   type Appearance,
   type CustomStatus,
@@ -133,7 +134,7 @@ export class Store {
       return this.saveMap(db, id, input);
     });
   }
-  async updateMap(id: string, expectedRevision: string, input: unknown) {
+  async updateMap(id: string, expectedRevision: string, input: unknown, deskUserId?: string) {
     return this.transaction(async (db) => {
       const current = await db.query('SELECT map_revision FROM workspaces WHERE id=$1 FOR UPDATE', [
         id,
@@ -146,6 +147,27 @@ export class Store {
             statusCode: 409,
           },
         );
+      if (deskUserId) {
+        const assignment = await db.query(
+          'SELECT zone_id FROM desk_assignments WHERE workspace_id=$1 AND user_id=$2',
+          [id, deskUserId],
+        );
+        if (!assignment.rows[0])
+          throw Object.assign(new Error('Claim a desk before editing'), { statusCode: 403 });
+        const saved = await db.query(
+          'SELECT definition FROM workspace_maps WHERE workspace_id=$1 AND revision=$2',
+          [id, expectedRevision],
+        );
+        try {
+          input = validateDeskEdit(
+            parseMap(saved.rows[0].definition).tiled,
+            input,
+            assignment.rows[0].zone_id,
+          );
+        } catch (error) {
+          throw Object.assign(error as Error, { statusCode: 400 });
+        }
+      }
       return this.saveMap(db, id, input);
     });
   }
@@ -339,11 +361,14 @@ export class Store {
     });
   }
   async releaseDesk(workspaceId: string, userId: string): Promise<boolean> {
-    const { rowCount } = await this.pool.query(
-      'DELETE FROM desk_assignments WHERE workspace_id=$1 AND user_id=$2',
-      [workspaceId, userId],
-    );
-    return Boolean(rowCount);
+    return this.transaction(async (db) => {
+      await db.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [workspaceId]);
+      const { rowCount } = await db.query(
+        'DELETE FROM desk_assignments WHERE workspace_id=$1 AND user_id=$2',
+        [workspaceId, userId],
+      );
+      return Boolean(rowCount);
+    });
   }
   async savePositions(workspaceId: string, positions: SavedPosition[]) {
     if (!positions.length) return;

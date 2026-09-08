@@ -14,7 +14,7 @@ import {
   type ParticipantPermission,
   type Room as LiveKitRoom,
 } from 'livekit-server-sdk';
-import { presetAppearance, type ServerMessage, type Status } from '@office/shared';
+import { parseMap, presetAppearance, type ServerMessage, type Status } from '@office/shared';
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url)
@@ -808,4 +808,56 @@ it('persists a mixed wardrobe and broadcasts it to connected players, rejecting 
   }
   expect((await store.members(id)).find((m) => m.id === ownerId)?.appearance).toEqual(appearance);
   peer.socket.close();
+});
+
+it('enforces desk ownership and revision checks for member item edits', async () => {
+  const token = await store.invite(id, 'decorator@example.test', 'Decorator', raw);
+  const cookie = `office_session=${await store.redeem(token)}`;
+  const member = (await store.members(id)).find((m) => m.email === 'decorator@example.test')!;
+  const workspace = await store.workspace(id);
+  const desk = parseMap(workspace.map).zones.find((z) => z.kind === 'desk')!;
+  const map = structuredClone(workspace.map);
+  const props = map.layers.find((l) => l.name === 'props')!.objects!;
+  props.push({
+    id: 999999,
+    name: 'Mug',
+    x: desk.x + 32,
+    y: desk.y + 32,
+    width: 0,
+    height: 0,
+    rotation: 0,
+    point: true,
+    properties: [{ name: 'prop', value: 'mug' }],
+  });
+  const save = (draft = map, revision = workspace.mapRevision) =>
+    office.app.inject({
+      method: 'PUT',
+      url: '/api/desks/mine/map',
+      headers: headers(cookie),
+      payload: { expectedRevision: revision, map: draft },
+    });
+  expect((await save()).statusCode).toBe(403);
+  await store.assignDesk(id, desk.id, member.id);
+  const structural = structuredClone(map);
+  structural.layers.find((l) => l.type === 'tilelayer')!.data![0] = 9;
+  expect((await save(structural)).statusCode).toBe(400);
+  const outside = structuredClone(map);
+  outside.layers.find((l) => l.name === 'props')!.objects!.at(-1)!.x = 0;
+  expect((await save(outside)).statusCode).toBe(400);
+  expect(
+    (
+      await office.app.inject({
+        method: 'PUT',
+        url: `/api/editor/workspaces/${id}/map`,
+        headers: headers(cookie),
+        payload: { expectedRevision: workspace.mapRevision, map },
+      })
+    ).statusCode,
+  ).toBe(403);
+  const saved = await save();
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect((await store.workspace(id)).map).toEqual(map);
+  expect((await save()).statusCode).toBe(409);
+  await store.assignDesk(id, desk.id, ownerId);
+  expect((await save(map, saved.json().workspace.mapRevision)).statusCode).toBe(403);
 });
