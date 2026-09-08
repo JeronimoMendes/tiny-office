@@ -1,4 +1,5 @@
 import type { OfficeMap } from './map';
+import { overlapsItem } from './assets';
 export const TICK_HZ = 15;
 export const STEP_MS = 1000 / TICK_HZ;
 export const SPEED = 120;
@@ -36,7 +37,7 @@ export function canStand(map: OfficeMap, x: number, y: number): boolean {
       if (map.collision[ty * map.tiled.width + tx] !== 0) return false;
     }
   }
-  return true;
+  return !map.itemColliders.some((collider) => overlapsItem(collider, x, y));
 }
 
 // The facing sticks to whichever axis the avatar was already showing while that

@@ -1,13 +1,7 @@
 import { parseMap, type TiledMap } from './map';
+import { decorAsset } from './assets';
 
-import {
-  itemLocalBounds,
-  itemPivot,
-  itemProperty,
-  propBounds,
-  spriteBounds,
-  type Item,
-} from './item-bounds';
+import { itemLocalBounds, itemPivot, itemProperty, propBounds, type Item } from './item-bounds';
 
 export function personalDesk(map: TiledMap, deskId: string) {
   return map.layers
@@ -98,25 +92,9 @@ export function validateDeskEdit(before: TiledMap, input: unknown, deskId: strin
       if (small) {
         if (!smallItems.has(String(itemProperty(item, 'prop'))) || item.width || item.height)
           return deny();
-      } else if (itemProperty(item, 'sprite') !== undefined) {
-        const sprite = spriteBounds[String(itemProperty(item, 'sprite'))];
-        if (!sprite || item.width !== sprite.width || item.height !== sprite.height) return deny();
       } else {
-        const data = JSON.parse(String(itemProperty(item, 'tileData'))) as number[];
-        const columns = Number(itemProperty(item, 'columns'));
-        const first = data[0];
-        const width = first === 10 ? 3 : [19, 21, 23, 25].includes(first) ? 2 : 1;
-        const height = first === 10 ? 3 : 1;
-        if (
-          !(
-            first === 10 || [19, 21, 23, 25, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36].includes(first)
-          ) ||
-          columns !== width ||
-          item.width !== width * 32 ||
-          item.height !== height * 32 ||
-          data.length !== width * height ||
-          data.some((gid, i) => gid !== first + i)
-        )
+        const asset = decorAsset(item, before);
+        if (!asset || item.width !== asset.width * 32 || item.height !== asset.height * 32)
           return deny();
       }
     }

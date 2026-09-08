@@ -3,6 +3,7 @@ import {
   heading,
   appearanceFrames,
   decorObjects,
+  itemRenderDepth,
   appearanceLayers,
   presetAppearance,
   parseMap,
@@ -215,7 +216,7 @@ export class OfficeScene extends Phaser.Scene {
           .image(centerX, centerY, `sprite-${object.sprite}`)
           .setDisplaySize(object.width, object.height)
           .setAngle(object.rotation)
-          .setDepth(DEPTH.props - 1 + (object.y + object.height) / 10000);
+          .setDepth(object.depth);
         continue;
       }
       const radians = (object.rotation * Math.PI) / 180;
@@ -248,7 +249,7 @@ export class OfficeScene extends Phaser.Scene {
           )
           .setDisplaySize(32, 32)
           .setAngle(object.rotation)
-          .setDepth(DEPTH.props - 1 + (object.y + object.height) / 10000);
+          .setDepth(object.depth);
       });
     }
   }
@@ -290,7 +291,7 @@ export class OfficeScene extends Phaser.Scene {
         .setOrigin(manifest.anchor[0], manifest.anchor[1])
         .setScale(1 / manifest.scale)
         .setAngle(object.rotation)
-        .setDepth(DEPTH.props + object.y / 10000)
+        .setDepth(itemRenderDepth(object, true, tiled))
         .setAlpha(layer.opacity);
     }
   }

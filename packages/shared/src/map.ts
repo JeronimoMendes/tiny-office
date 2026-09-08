@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { itemCollider, itemRenderDepth, itemRenderSettings, type ItemCollider } from './assets';
 
 const property = z
   .object({ name: z.string(), value: z.union([z.string(), z.number(), z.boolean()]) })
@@ -84,12 +85,14 @@ export type DecorObject = {
   // cells, so a piece can be drawn as pixel art without being packed into a sheet.
   sprite: string | null;
   solid: boolean;
+  depth: number;
 };
 export type OfficeMap = {
   tiled: TiledMap;
   width: number;
   height: number;
   collision: number[];
+  itemColliders: ItemCollider[];
   zones: Zone[];
   spawn: { x: number; y: number };
 };
@@ -110,6 +113,7 @@ export function decorObjects(tiled: TiledMap): DecorObject[] {
       height: object.height,
       rotation: object.rotation,
       solid: props.solid === true,
+      depth: itemRenderDepth(object, false, tiled),
     };
     // The name becomes a URL, so keep it to a bare filename no map can escape.
     if (props.sprite !== undefined)
@@ -154,24 +158,15 @@ export function parseMap(input: unknown): OfficeMap {
     if (l.data?.some((gid) => gid > tiled.tilesets[0].tilecount))
       throw new Error('Unknown or flipped tile GID');
   }
-  const collisionData = [...collision.data];
-  for (const decor of decorObjects(tiled)) {
-    if (!decor.solid) continue;
-    const centerX = decor.x + decor.width / 2;
-    const centerY = decor.y + decor.height / 2;
-    const radians = (-decor.rotation * Math.PI) / 180;
-    const cosine = Math.cos(radians);
-    const sine = Math.sin(radians);
-    for (let row = 0; row < tiled.height; row++)
-      for (let column = 0; column < tiled.width; column++) {
-        const dx = column * 32 + 16 - centerX;
-        const dy = row * 32 + 16 - centerY;
-        const localX = dx * cosine - dy * sine;
-        const localY = dx * sine + dy * cosine;
-        if (Math.abs(localX) < decor.width / 2 && Math.abs(localY) < decor.height / 2)
-          collisionData[row * tiled.width + column] = 1;
-      }
-  }
+  decorObjects(tiled); // Validate artwork and render settings before resolving colliders.
+  for (const prop of tiled.layers.find((l) => l.name === 'props')?.objects ?? [])
+    itemRenderSettings(prop, true, tiled);
+  const itemColliders = (tiled.layers.find((l) => l.name === 'decor')?.objects ?? []).flatMap(
+    (item) => {
+      const collider = itemCollider(item, tiled);
+      return collider ? [collider] : [];
+    },
+  );
   const zones = (
     tiled.layers.find((l) => l.name === 'zones' && l.type === 'objectgroup')?.objects ?? []
   ).map((o) => {
@@ -220,7 +215,8 @@ export function parseMap(input: unknown): OfficeMap {
     tiled,
     width: tiled.width * 32,
     height: tiled.height * 32,
-    collision: collisionData,
+    collision: [...collision.data],
+    itemColliders,
     zones,
     spawn: { x: spawn.x, y: spawn.y },
   };

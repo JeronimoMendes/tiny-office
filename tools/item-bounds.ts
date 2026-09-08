@@ -1,5 +1,5 @@
 /** Post-process finished artwork; never changes PNGs. Run npm run assets:bounds. */
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, watch } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -123,8 +123,30 @@ export function collectBounds(root: string) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = fileURLToPath(new URL('../assets/', import.meta.url));
-  writeFileSync(
-    resolve(root, 'item-bounds.json'),
-    JSON.stringify(collectBounds(root), null, 2) + '\n',
-  );
+  const output = resolve(root, 'item-bounds.json');
+  const refresh = () => {
+    const bounds = collectBounds(root);
+    if (
+      existsSync(output) &&
+      JSON.stringify(JSON.parse(readFileSync(output, 'utf8'))) === JSON.stringify(bounds)
+    )
+      return;
+    writeFileSync(output, JSON.stringify(bounds, null, 2) + '\n');
+    console.log('Updated item bounds from artwork');
+  };
+  refresh();
+  if (process.argv.includes('--watch')) {
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    watch(root, { recursive: true }, (_event, filename) => {
+      if (!filename || !(filename.endsWith('.png') || filename === 'props.json')) return;
+      clearTimeout(pending);
+      pending = setTimeout(() => {
+        try {
+          refresh();
+        } catch (error) {
+          console.error('Unable to refresh item bounds; check the artwork export:', error);
+        }
+      }, 150);
+    });
+  }
 }

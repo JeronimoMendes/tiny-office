@@ -7,11 +7,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -k 'npm run dev -w @office/server' 'npm run dev -w @office/client'",
+    "predev": "npm run assets:bounds",
+    "dev": "concurrently -k 'tsx tools/item-bounds.ts --watch' 'npm run dev -w @office/server' 'npm run dev -w @office/client'",
+    "prebuild": "npm run assets:bounds",
     "build": "npm run build -w @office/client && npm run build -w @office/server",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "pretest": "npm run assets:bounds",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
