@@ -525,6 +525,7 @@ function Office({ info }: { info: SessionInfo }) {
           <span className="control-divider" />
           <Suspense fallback={<small>Media…</small>}>
             <MediaControls
+              onSpeakersChange={session.setSpeaking}
               zoneId={self?.zoneId ?? null}
               status={view.user.status}
               connected={view.connection === 'online'}

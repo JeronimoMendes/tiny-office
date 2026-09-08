@@ -14,6 +14,7 @@ import {
 import type { Status } from '@office/shared';
 import { api } from '../session/session';
 import { callRows, pinnedLayout } from './media-layout';
+import { watchSpeakers } from './media-speaking';
 import {
   AVAILABLE_MEDIA_IDLE_MS,
   shouldPauseAvailableMedia,
@@ -64,12 +65,14 @@ export function MediaControls({
   connected,
   displayName,
   hasPeerInZone,
+  onSpeakersChange,
 }: {
   zoneId: string | null;
   status: Status;
   connected: boolean;
   displayName: string;
   hasPeerInZone: boolean;
+  onSpeakersChange: (ids: string[]) => void;
 }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -218,6 +221,7 @@ export function MediaControls({
   useEffect(() => {
     let cancelled = false;
     const next = new Room({ adaptiveStream: true, dynacast: true });
+    onSpeakersChange([]);
     roomRef.current = null;
     setRoom(null);
     setMic(false);
@@ -237,6 +241,7 @@ export function MediaControls({
       );
       return () => void next.disconnect();
     }
+    setMessage(attempt > 0 ? 'Reconnecting media…' : 'Connecting to zone conversation…');
     // Elements are removed by selector: the SDK detaches a revoked track before
     // this handler runs, so track.detach() can no longer report its elements.
     const drop = (selector: string) =>
@@ -266,6 +271,7 @@ export function MediaControls({
       track.detach();
       drop(`[data-track="${publication.trackSid}"]`);
     };
+    const stopWatchingSpeakers = watchSpeakers(next, onSpeakersChange);
     next.on(RoomEvent.LocalTrackPublished, (publication: LocalTrackPublication) => {
       if (publication.source !== Track.Source.ScreenShare || !publication.track || cancelled)
         return;
@@ -316,18 +322,19 @@ export function MediaControls({
         setMessage(status === 'focus' ? 'Focused · mic and video off' : 'In zone conversation');
       })
       .catch((error) => {
-        if (!cancelled) setMessage((error as Error).message);
+        if (!cancelled) setMessage(`Could not connect to voice call: ${(error as Error).message}`);
       });
     return () => {
       cancelled = true;
       if (roomRef.current === next) roomRef.current = null;
       published.current.clear();
       pending.current.clear();
+      stopWatchingSpeakers();
       next.removeAllListeners();
       void next.disconnect();
       if (media.current) media.current.replaceChildren();
     };
-  }, [connected, zoneId, status, attempt]);
+  }, [connected, zoneId, status, attempt, onSpeakersChange]);
 
   useEffect(() => {
     const label = media.current?.querySelector('[data-local] .media-name');
