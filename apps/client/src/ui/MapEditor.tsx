@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { type SessionInfo, type TiledMap, type Workspace } from '@office/shared';
+import {
+  editableDeskItem,
+  personalDesk,
+  validateDeskEdit,
+  type SessionInfo,
+  type TiledMap,
+  type Workspace,
+} from '@office/shared';
 import { api } from '../session/session';
 
 type Tool = 'select' | 'tile' | 'move-tile' | 'object';
@@ -224,8 +231,16 @@ function normalizeDecor(input: TiledMap) {
   return { map, converted: true };
 }
 
-export function MapEditor({ info }: { info: SessionInfo }) {
-  const initialDraft = useRef(normalizeDecor(info.workspace.map));
+export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskOnly?: boolean }) {
+  const deskId = Object.entries(info.workspace.desks).find(
+    ([, userId]) => userId === info.user.id,
+  )?.[0];
+  const ownDesk = deskOnly && deskId ? personalDesk(info.workspace.map, deskId) : undefined;
+  const initialDraft = useRef(
+    deskOnly
+      ? { map: clone(info.workspace.map), converted: false }
+      : normalizeDecor(info.workspace.map),
+  );
   const [workspace, setWorkspace] = useState(info.workspace);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([
     {
@@ -245,7 +260,7 @@ export function MapEditor({ info }: { info: SessionInfo }) {
   const [gid, setGid] = useState(1);
   const [propName, setPropName] = useState('monitor');
   const [decorChoice, setDecorChoice] = useState<DecorChoice | null>(null);
-  const [deskScope, setDeskScope] = useState('map');
+  const [deskScope, setDeskScope] = useState(deskOnly ? (deskId ?? 'map') : 'map');
   const [selection, setSelection] = useState<Selection>(null);
   const [selectedObjects, setSelectedObjects] = useState<SelectedObject[]>([]);
   const [multiSelect, setMultiSelect] = useState(false);
@@ -256,7 +271,7 @@ export function MapEditor({ info }: { info: SessionInfo }) {
       ? 'Legacy furniture was converted to movable objects. Save to apply.'
       : '',
   );
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(deskOnly ? 3 : 1);
   const [invalidPlacement, setInvalidPlacement] = useState<Rect | null>(null);
   const [hasClipboard, setHasClipboard] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -298,9 +313,10 @@ export function MapEditor({ info }: { info: SessionInfo }) {
     selectedObjects.some((selected) => selected.type === type && selected.index === index);
 
   useEffect(() => {
-    void api<{ workspaces: WorkspaceSummary[] }>('/editor/workspaces')
-      .then((result) => setWorkspaces(result.workspaces))
-      .catch((error: Error) => setMessage(error.message));
+    if (!deskOnly)
+      void api<{ workspaces: WorkspaceSummary[] }>('/editor/workspaces')
+        .then((result) => setWorkspaces(result.workspaces))
+        .catch((error: Error) => setMessage(error.message));
     void fetch('/assets/props.json')
       .then((response) => response.json())
       .then((value) => {
@@ -579,6 +595,17 @@ export function MapEditor({ info }: { info: SessionInfo }) {
     setDraft((current) => {
       const next = clone(current);
       change(next);
+      if (deskOnly) {
+        try {
+          validateDeskEdit(info.workspace.map, next, deskId ?? '');
+        } catch {
+          setMessage('Keep items entirely inside your desk. Structural tiles cannot be edited.');
+          setSelection(null);
+          setSelectedObjects([]);
+          drag.current = null;
+          return current;
+        }
+      }
       return next;
     });
     setDirty(true);
@@ -643,11 +670,13 @@ export function MapEditor({ info }: { info: SessionInfo }) {
   function hit(x: number, y: number): Selection {
     for (let index = (propsLayer?.objects?.length ?? 0) - 1; index >= 0; index--) {
       const object = propsLayer!.objects![index];
+      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, true))) continue;
       if (Math.abs(x - object.x) < 18 && Math.abs(y - object.y + 10) < 20)
         return { type: 'prop', index };
     }
     for (let index = (decorLayer?.objects?.length ?? 0) - 1; index >= 0; index--) {
       const object = decorLayer!.objects![index];
+      if (deskOnly && (!ownDesk || !editableDeskItem(object, ownDesk, false))) continue;
       if (
         x >= object.x &&
         x <= object.x + object.width &&
@@ -656,6 +685,7 @@ export function MapEditor({ info }: { info: SessionInfo }) {
       )
         return { type: 'decor', index };
     }
+    if (deskOnly) return null;
     for (let index = zones.length - 1; index >= 0; index--) {
       const zone = zones[index];
       if (x >= zone.x && x <= zone.x + zone.width && y >= zone.y && y <= zone.y + zone.height)
@@ -1265,7 +1295,7 @@ export function MapEditor({ info }: { info: SessionInfo }) {
     setMessage('Saving…');
     try {
       const result = await api<{ workspace: Workspace }>(
-        `/editor/workspaces/${workspace.id}/map`,
+        deskOnly ? '/desks/mine/map' : `/editor/workspaces/${workspace.id}/map`,
         { expectedRevision: workspace.mapRevision, map: draft },
         'PUT',
       );
@@ -1280,10 +1310,10 @@ export function MapEditor({ info }: { info: SessionInfo }) {
     }
   }
 
-  if (info.user.role !== 'owner')
+  if (deskOnly ? !ownDesk : info.user.role !== 'owner')
     return (
       <main className="editor-denied">
-        <h1>Owner access required</h1>
+        <h1>{deskOnly ? 'Claim a desk first' : 'Owner access required'}</h1>
         <a href="/">Return to the office</a>
       </main>
     );
@@ -1292,26 +1322,31 @@ export function MapEditor({ info }: { info: SessionInfo }) {
     <main className="map-editor">
       <header className="editor-header">
         <div>
-          <span className="eyebrow">ADMIN · MAP EDITOR</span>
-          <h1>Shape your workspace</h1>
+          <span className="eyebrow">{deskOnly ? 'YOUR DESK' : 'ADMIN · MAP EDITOR'}</span>
+          <h1>{deskOnly ? 'Personalize your desk' : 'Shape your workspace'}</h1>
         </div>
-        <label>
-          Workspace
-          <select value={workspace.id} onChange={(event) => void loadWorkspace(event.target.value)}>
-            {workspaces.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!deskOnly && (
+          <label>
+            Workspace
+            <select
+              value={workspace.id}
+              onChange={(event) => void loadWorkspace(event.target.value)}
+            >
+              {workspaces.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="editor-actions">
           <span className={dirty ? 'unsaved' : ''}>{message || 'All changes saved'}</span>
           <a className="button-link" href="/">
             Back to office
           </a>
           <button className="primary" disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : 'Save workspace'}
+            {saving ? 'Saving…' : deskOnly ? 'Save desk' : 'Save workspace'}
           </button>
         </div>
       </header>
@@ -1322,15 +1357,19 @@ export function MapEditor({ info }: { info: SessionInfo }) {
             <button className={tool === 'select' ? 'active' : ''} onClick={() => setTool('select')}>
               ↖ Select & move
             </button>
-            <button
-              className={tool === 'move-tile' ? 'active' : ''}
-              onClick={() => setTool('move-tile')}
-            >
-              ⇄ Move tile
-            </button>
-            <button className={tool === 'tile' ? 'active' : ''} onClick={() => setTool('tile')}>
-              ✎ Paint tile
-            </button>
+            {!deskOnly && (
+              <>
+                <button
+                  className={tool === 'move-tile' ? 'active' : ''}
+                  onClick={() => setTool('move-tile')}
+                >
+                  ⇄ Move tile
+                </button>
+                <button className={tool === 'tile' ? 'active' : ''} onClick={() => setTool('tile')}>
+                  ✎ Paint tile
+                </button>
+              </>
+            )}
             <button className={tool === 'object' ? 'active' : ''} onClick={() => setTool('object')}>
               ＋ Place object
             </button>
@@ -1380,117 +1419,124 @@ export function MapEditor({ info }: { info: SessionInfo }) {
             </small>
           </div>
         )}
-        <section>
-          <h2>Tiles</h2>
-          <label>
-            Layer
-            <select value={layerName} onChange={(event) => setLayerName(event.target.value)}>
-              {tileLayers.map((layer) => (
-                <option key={layer.name}>{layer.name}</option>
-              ))}
-            </select>
-          </label>
-          <small className="editor-help">
-            Only floors and walls live on the structural grid. Every structural cell is independent.
-          </small>
-          <div className="tile-palette">
-            <button
-              className={gid === 0 ? 'active erase-tile' : 'erase-tile'}
-              onClick={() => {
-                setGid(0);
-                setTool('tile');
-              }}
-            >
-              ×
-            </button>
-            {Array.from({ length: Math.min(draft.tilesets[0].tilecount, 9) }, (_, index) => (
-              <button
-                key={index}
-                className={gid === index + 1 ? 'active' : ''}
-                style={{
-                  backgroundImage: `url(/assets/${draft.tilesets[0].image.split('/').pop()})`,
-                  backgroundPosition: `${-(index % draft.tilesets[0].columns) * 32}px ${-Math.floor(index / draft.tilesets[0].columns) * 32}px`,
-                }}
-                onClick={() => {
-                  setGid(index + 1);
-                  setTool('tile');
-                }}
-                aria-label={`Tile ${index + 1}`}
-              />
-            ))}
-          </div>
-        </section>
-        <section>
-          <h2>Spaces</h2>
-          <small className="editor-help">
-            Choose a space below, then drag its eight canvas handles or change its width and height.
-            Invalid sizes are blocked and shown in red.
-          </small>
-          <div className="row">
-            <button onClick={() => addZone('desk')}>＋ Desktop</button>
-            <button onClick={() => addZone('meeting')}>＋ Room</button>
-          </div>
-          <div className="row space-copy-actions">
-            <button disabled={selection?.type !== 'zone'} onClick={copySpace}>
-              Copy space
-            </button>
-            <button disabled={!hasClipboard} onClick={pasteSpace}>
-              Paste with items
-            </button>
-          </div>
-          <div className="space-list">
-            {zones.map((zone, index) => (
-              <button
-                className={selection?.type === 'zone' && selection.index === index ? 'active' : ''}
-                key={String(property(zone, 'zoneId'))}
-                onClick={() => {
-                  setSelection({ type: 'zone', index });
-                  setSelectedObjects([]);
-                  setTool('select');
-                }}
-              >
-                <span>{property(zone, 'kind') === 'desk' ? 'Desk' : 'Room'}</span>
-                {zone.name}
-              </button>
-            ))}
-          </div>
-          {selectedZone && (
-            <div className="selection-fields">
+        {!deskOnly && (
+          <>
+            <section>
+              <h2>Tiles</h2>
               <label>
-                Name
-                <input
-                  value={selectedZone.name}
-                  onChange={(event) => updateSelected('name', event.target.value)}
-                />
+                Layer
+                <select value={layerName} onChange={(event) => setLayerName(event.target.value)}>
+                  {tileLayers.map((layer) => (
+                    <option key={layer.name}>{layer.name}</option>
+                  ))}
+                </select>
               </label>
-              <div className="row">
-                <label>
-                  Width
-                  <input
-                    type="number"
-                    step="32"
-                    value={selectedZone.width}
-                    onChange={(event) => updateSelected('width', event.target.value)}
+              <small className="editor-help">
+                Only floors and walls live on the structural grid. Every structural cell is
+                independent.
+              </small>
+              <div className="tile-palette">
+                <button
+                  className={gid === 0 ? 'active erase-tile' : 'erase-tile'}
+                  onClick={() => {
+                    setGid(0);
+                    setTool('tile');
+                  }}
+                >
+                  ×
+                </button>
+                {Array.from({ length: Math.min(draft.tilesets[0].tilecount, 9) }, (_, index) => (
+                  <button
+                    key={index}
+                    className={gid === index + 1 ? 'active' : ''}
+                    style={{
+                      backgroundImage: `url(/assets/${draft.tilesets[0].image.split('/').pop()})`,
+                      backgroundPosition: `${-(index % draft.tilesets[0].columns) * 32}px ${-Math.floor(index / draft.tilesets[0].columns) * 32}px`,
+                    }}
+                    onClick={() => {
+                      setGid(index + 1);
+                      setTool('tile');
+                    }}
+                    aria-label={`Tile ${index + 1}`}
                   />
-                </label>
-                <label>
-                  Height
-                  <input
-                    type="number"
-                    step="32"
-                    value={selectedZone.height}
-                    onChange={(event) => updateSelected('height', event.target.value)}
-                  />
-                </label>
+                ))}
               </div>
-              <button className="danger" onClick={removeSelection}>
-                Delete this space
-              </button>
-            </div>
-          )}
-        </section>
+            </section>
+            <section>
+              <h2>Spaces</h2>
+              <small className="editor-help">
+                Choose a space below, then drag its eight canvas handles or change its width and
+                height. Invalid sizes are blocked and shown in red.
+              </small>
+              <div className="row">
+                <button onClick={() => addZone('desk')}>＋ Desktop</button>
+                <button onClick={() => addZone('meeting')}>＋ Room</button>
+              </div>
+              <div className="row space-copy-actions">
+                <button disabled={selection?.type !== 'zone'} onClick={copySpace}>
+                  Copy space
+                </button>
+                <button disabled={!hasClipboard} onClick={pasteSpace}>
+                  Paste with items
+                </button>
+              </div>
+              <div className="space-list">
+                {zones.map((zone, index) => (
+                  <button
+                    className={
+                      selection?.type === 'zone' && selection.index === index ? 'active' : ''
+                    }
+                    key={String(property(zone, 'zoneId'))}
+                    onClick={() => {
+                      setSelection({ type: 'zone', index });
+                      setSelectedObjects([]);
+                      setTool('select');
+                    }}
+                  >
+                    <span>{property(zone, 'kind') === 'desk' ? 'Desk' : 'Room'}</span>
+                    {zone.name}
+                  </button>
+                ))}
+              </div>
+              {selectedZone && (
+                <div className="selection-fields">
+                  <label>
+                    Name
+                    <input
+                      value={selectedZone.name}
+                      onChange={(event) => updateSelected('name', event.target.value)}
+                    />
+                  </label>
+                  <div className="row">
+                    <label>
+                      Width
+                      <input
+                        type="number"
+                        step="32"
+                        value={selectedZone.width}
+                        onChange={(event) => updateSelected('width', event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Height
+                      <input
+                        type="number"
+                        step="32"
+                        value={selectedZone.height}
+                        onChange={(event) => updateSelected('height', event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <button className="danger" onClick={removeSelection}>
+                    Delete this space
+                  </button>
+                </div>
+              )}
+            </section>
+          </>
+        )}
         <section>
-          <h2>Decor objects</h2>
+          <h2>Big items</h2>
           <small className="editor-help">
             Furniture and rugs sit above structural floor and wall tiles. Select an object to move
             or rotate the whole piece.
@@ -1525,20 +1571,22 @@ export function MapEditor({ info }: { info: SessionInfo }) {
             ))}
           </div>
           <h2 className="subheading">Small items</h2>
-          <label>
-            Place on
-            <select value={deskScope} onChange={(event) => setDeskScope(event.target.value)}>
-              <option value="map">Entire map</option>
-              {deskZones.map((zone) => (
-                <option
-                  key={String(property(zone, 'zoneId'))}
-                  value={String(property(zone, 'zoneId'))}
-                >
-                  {zone.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!deskOnly && (
+            <label>
+              Place on
+              <select value={deskScope} onChange={(event) => setDeskScope(event.target.value)}>
+                <option value="map">Entire map</option>
+                {deskZones.map((zone) => (
+                  <option
+                    key={String(property(zone, 'zoneId'))}
+                    value={String(property(zone, 'zoneId'))}
+                  >
+                    {zone.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="prop-palette">
             {manifest?.items.map((item) => (
               <button
@@ -1580,14 +1628,41 @@ export function MapEditor({ info }: { info: SessionInfo }) {
           >
             +
           </button>
-          <button onClick={() => setZoom(1)}>Reset</button>
+          <button onClick={() => setZoom(deskOnly ? 3 : 1)}>Reset</button>
         </div>
-        <div className="editor-canvas-wrap">
+        <div
+          className="editor-canvas-wrap"
+          style={
+            ownDesk
+              ? {
+                  width: ownDesk.width * zoom,
+                  height: ownDesk.height * zoom,
+                  minWidth: 0,
+                  margin: '0 auto',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  padding: 0,
+                  flex: 'none',
+                }
+              : undefined
+          }
+        >
           <canvas
             ref={canvas}
             width={parsed.width}
             height={parsed.height}
-            style={{ width: parsed.width * zoom, height: parsed.height * zoom }}
+            style={{
+              width: parsed.width * zoom,
+              height: parsed.height * zoom,
+              ...(ownDesk
+                ? {
+                    position: 'absolute',
+                    maxWidth: 'none',
+                    left: -ownDesk.x * zoom,
+                    top: -ownDesk.y * zoom,
+                  }
+                : {}),
+            }}
             onPointerDown={pointerDown}
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}
@@ -1597,8 +1672,9 @@ export function MapEditor({ info }: { info: SessionInfo }) {
           />
         </div>
         <p>
-          Changes stay in a draft until you save. Existing people, positions, and desk assignments
-          are preserved when possible; only positions made invalid by new walls move to spawn.
+          {deskOnly
+            ? 'Place, drag, rotate or delete items inside your desk. Changes stay in a draft until you save.'
+            : 'Changes stay in a draft until you save. Existing people, positions, and desk assignments are preserved when possible; only positions made invalid by new walls move to spawn.'}
         </p>
       </section>
     </main>

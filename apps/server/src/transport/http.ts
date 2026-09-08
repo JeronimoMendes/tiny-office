@@ -183,6 +183,18 @@ export function httpRoutes(
     world.applyWorkspaceMap(workspace);
     return { workspace };
   });
+  app.put('/api/desks/mine/map', async (req) => {
+    const session = await identity(req);
+    const body = z
+      .object({ expectedRevision: z.string().length(64), map: z.unknown() })
+      .strict()
+      .parse(req.body);
+    await world.flush();
+    await store.updateMap(session.workspaceId, body.expectedRevision, body.map, session.userId);
+    const workspace = await store.workspace(session.workspaceId);
+    world.applyWorkspaceMap(workspace);
+    return { workspace };
+  });
   app.post('/api/invites', async (req) => {
     await identity(req, true);
     const { email, displayName } = inviteSchema.parse(req.body);
