@@ -71,6 +71,13 @@ const decorChoices: DecorChoice[] = [
     width: 2,
     height: 1,
   },
+  {
+    name: 'wind-turbine',
+    label: 'Wind turbine',
+    sprite: 'wind-turbine',
+    width: 1,
+    height: 2,
+  },
   { name: 'bookshelf', label: 'Bookshelf', gid: 31, width: 1, solid: true },
   { name: 'cabinet', label: 'Cabinet', gid: 32, width: 1, solid: true },
   { name: 'cooler', label: 'Water cooler', gid: 33, width: 1, solid: true },
