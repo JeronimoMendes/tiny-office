@@ -113,6 +113,14 @@ export class OfficeScene extends Phaser.Scene {
       });
     this.load.spritesheet('props', '/assets/props.png', { frameWidth: 128, frameHeight: 128 });
     this.load.json('props-manifest', '/assets/props.json');
+    // Hand-drawn decor is its own PNG rather than a packed cell, so each named
+    // sprite loads on its own. The map is validated before preload runs.
+    for (const sprite of new Set(
+      decorObjects(this.snapshot.workspace.map)
+        .map((object) => object.sprite)
+        .filter((name): name is string => name !== null),
+    ))
+      this.load.image(`sprite-${sprite}`, `/assets/sprites/${sprite}.png`);
   }
   create() {
     const parsed = parseMap(this.snapshot.workspace.map);
@@ -200,6 +208,14 @@ export class OfficeScene extends Phaser.Scene {
     for (const object of decorObjects(tiled)) {
       const centerX = object.x + object.width / 2;
       const centerY = object.y + object.height / 2;
+      if (object.sprite) {
+        this.add
+          .image(centerX, centerY, `sprite-${object.sprite}`)
+          .setDisplaySize(object.width, object.height)
+          .setAngle(object.rotation)
+          .setDepth(DEPTH.props - 1 + (object.y + object.height) / 10000);
+        continue;
+      }
       const radians = (object.rotation * Math.PI) / 180;
       const cosine = Math.cos(radians);
       const sine = Math.sin(radians);

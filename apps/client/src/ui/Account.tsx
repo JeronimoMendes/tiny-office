@@ -136,6 +136,7 @@ const categories: { slot: AppearanceSlot; label: string }[] = [
   { slot: 'head', label: 'Head' },
   { slot: 'skin', label: 'Skin' },
   { slot: 'hair', label: 'Hair' },
+  { slot: 'beard', label: 'Facial hair' },
   { slot: 'shirt', label: 'Shirts' },
   { slot: 'pants', label: 'Pants' },
   { slot: 'shoes', label: 'Shoes' },
@@ -144,6 +145,7 @@ const categories: { slot: AppearanceSlot; label: string }[] = [
 ];
 const colorSlots: Partial<Record<AppearanceSlot, AppearanceSlot>> = {
   hair: 'hairColor',
+  beard: 'hairColor',
   shirt: 'shirtColor',
   pants: 'pantsColor',
   shoes: 'shoesColor',

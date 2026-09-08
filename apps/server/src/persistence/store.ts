@@ -87,6 +87,14 @@ export class Store {
         await db.query('ALTER TABLE memberships ADD COLUMN custom_status jsonb');
         await db.query('INSERT INTO schema_migrations VALUES (4)');
       }
+      if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 5')).rowCount) {
+        await db.query('ALTER TABLE memberships ADD COLUMN IF NOT EXISTS custom_status jsonb');
+        await db.query(
+          `UPDATE users SET appearance = appearance || '{"beard":0}'::jsonb
+           WHERE appearance IS NOT NULL`,
+        );
+        await db.query('INSERT INTO schema_migrations VALUES (5)');
+      }
     });
   }
   async ensureWorkspace(id: string, input: unknown) {

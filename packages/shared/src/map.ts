@@ -80,6 +80,9 @@ export type DecorObject = {
   rotation: number;
   columns: number;
   data: number[];
+  // Hand-drawn decor names a PNG in assets/sprites instead of assembling atlas
+  // cells, so a piece can be drawn as pixel art without being packed into a sheet.
+  sprite: string | null;
   solid: boolean;
 };
 export type OfficeMap = {
@@ -96,6 +99,29 @@ export function decorObjects(tiled: TiledMap): DecorObject[] {
     tiled.layers.find((l) => l.name === 'decor' && l.type === 'objectgroup')?.objects ?? [];
   return objects.map((object) => {
     const props = Object.fromEntries(object.properties.map((item) => [item.name, item.value]));
+    if (object.point || object.width <= 0 || object.height <= 0)
+      throw new Error('Invalid decor object');
+    const placement = {
+      id: object.id,
+      name: object.name,
+      x: object.x,
+      y: object.y,
+      width: object.width,
+      height: object.height,
+      rotation: object.rotation,
+      solid: props.solid === true,
+    };
+    // The name becomes a URL, so keep it to a bare filename no map can escape.
+    if (props.sprite !== undefined)
+      return {
+        ...placement,
+        columns: 1,
+        data: [],
+        sprite: z
+          .string()
+          .regex(/^[a-z0-9-]+$/)
+          .parse(props.sprite),
+      };
     let data: unknown;
     try {
       data = JSON.parse(String(props.tileData));
@@ -104,26 +130,9 @@ export function decorObjects(tiled: TiledMap): DecorObject[] {
     }
     const columns = z.number().int().positive().parse(props.columns);
     const tiles = z.array(z.number().int().nonnegative()).nonempty().parse(data);
-    if (
-      object.point ||
-      object.width <= 0 ||
-      object.height <= 0 ||
-      tiles.length % columns ||
-      tiles.some((gid) => gid > tiled.tilesets[0].tilecount)
-    )
+    if (tiles.length % columns || tiles.some((gid) => gid > tiled.tilesets[0].tilecount))
       throw new Error('Invalid decor object');
-    return {
-      id: object.id,
-      name: object.name,
-      x: object.x,
-      y: object.y,
-      width: object.width,
-      height: object.height,
-      rotation: object.rotation,
-      columns,
-      data: tiles,
-      solid: props.solid === true,
-    };
+    return { ...placement, columns, data: tiles, sprite: null };
   });
 }
 

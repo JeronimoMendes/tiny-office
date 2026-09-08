@@ -18,7 +18,10 @@ type SpaceClipboard = {
 type DecorChoice = {
   name: string;
   label: string;
-  gid: number;
+  // Tile-backed decor names its first GID; hand-drawn decor names a PNG in
+  // assets/sprites and is placed whole instead of assembled from cells.
+  gid?: number;
+  sprite?: string;
   width: number;
   height?: number;
   solid?: boolean;
@@ -44,6 +47,7 @@ const setProperty = (object: EditorObject, name: string, value: string | number 
 };
 const decorChoices: DecorChoice[] = [
   { name: 'rug', label: 'Large rug', gid: 10, width: 3, height: 3 },
+  { name: 'cat-rug', label: 'Cat rug', sprite: 'cat-rug', width: 2, height: 2 },
   { name: 'desk', label: 'Large desk', gid: 19, width: 2, solid: true },
   { name: 'couch', label: 'Couch', gid: 21, width: 2, solid: true },
   { name: 'table', label: 'Large table', gid: 23, width: 2, solid: true },
@@ -52,6 +56,28 @@ const decorChoices: DecorChoice[] = [
   { name: 'chair-down', label: 'Chair (down)', gid: 28, width: 1, solid: true },
   { name: 'plant-tall', label: 'Tall flower pot', gid: 29, width: 1, solid: true },
   { name: 'plant-small', label: 'Small flower pot', gid: 30, width: 1, solid: true },
+  {
+    name: 'monstera',
+    label: 'Monstera',
+    sprite: 'monstera',
+    width: 1,
+    height: 2,
+    solid: true,
+  },
+  {
+    name: 'ultrawide-monitor',
+    label: 'Ultrawide monitor',
+    sprite: 'ultrawide-monitor',
+    width: 2,
+    height: 1,
+  },
+  {
+    name: 'wind-turbine',
+    label: 'Wind turbine',
+    sprite: 'wind-turbine',
+    width: 1,
+    height: 2,
+  },
   { name: 'bookshelf', label: 'Bookshelf', gid: 31, width: 1, solid: true },
   { name: 'cabinet', label: 'Cabinet', gid: 32, width: 1, solid: true },
   { name: 'cooler', label: 'Water cooler', gid: 33, width: 1, solid: true },
@@ -236,6 +262,7 @@ export function MapEditor({ info }: { info: SessionInfo }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const tiles = useRef<HTMLImageElement | null>(null);
   const props = useRef<HTMLImageElement | null>(null);
+  const sprites = useRef(new Map<string, HTMLImageElement>());
   const drag = useRef<{
     x: number;
     y: number;
@@ -294,6 +321,17 @@ export function MapEditor({ info }: { info: SessionInfo }) {
       props.current = propImage;
       draw();
     };
+    // Hand-drawn decor is one PNG per piece, so the palette and the canvas both
+    // need every sprite a choice can place.
+    for (const { sprite } of decorChoices) {
+      if (!sprite || sprites.current.has(sprite)) continue;
+      const image = new Image();
+      image.src = `/assets/sprites/${sprite}.png`;
+      image.onload = () => {
+        sprites.current.set(sprite, image);
+        draw();
+      };
+    }
   }, [draft.tilesets]);
   useEffect(() => {
     draw();
@@ -356,11 +394,21 @@ export function MapEditor({ info }: { info: SessionInfo }) {
     context.globalAlpha = 1;
     if (sheet) {
       for (const object of decorLayer?.objects ?? []) {
-        const data = JSON.parse(String(property(object, 'tileData'))) as number[];
-        const objectColumns = Number(property(object, 'columns'));
+        const sprite = property(object, 'sprite');
         context.save();
         context.translate(object.x + object.width / 2, object.y + object.height / 2);
         context.rotate((object.rotation * Math.PI) / 180);
+        const drawn = sprite ? sprites.current.get(String(sprite)) : undefined;
+        if (drawn)
+          context.drawImage(
+            drawn,
+            -object.width / 2,
+            -object.height / 2,
+            object.width,
+            object.height,
+          );
+        const data = sprite ? [] : (JSON.parse(String(property(object, 'tileData'))) as number[]);
+        const objectColumns = Number(property(object, 'columns'));
         data.forEach((tile, index) => {
           if (!tile) return;
           const frame = tile - 1;
@@ -697,16 +745,21 @@ export function MapEditor({ info }: { info: SessionInfo }) {
             width,
             height,
             rotation: 0,
-            properties: [
-              {
-                name: 'tileData',
-                value: JSON.stringify(
-                  Array.from({ length: count }, (_, index) => decorChoice.gid + index),
-                ),
-              },
-              { name: 'columns', value: decorChoice.width },
-              { name: 'solid', value: decorChoice.solid ?? false },
-            ],
+            properties: decorChoice.sprite
+              ? [
+                  { name: 'sprite', value: decorChoice.sprite },
+                  { name: 'solid', value: decorChoice.solid ?? false },
+                ]
+              : [
+                  {
+                    name: 'tileData',
+                    value: JSON.stringify(
+                      Array.from({ length: count }, (_, index) => decorChoice.gid! + index),
+                    ),
+                  },
+                  { name: 'columns', value: decorChoice.width },
+                  { name: 'solid', value: decorChoice.solid ?? false },
+                ],
           });
           const index = layer.objects.length - 1;
           setSelection({ type: 'decor', index });
@@ -1453,10 +1506,19 @@ export function MapEditor({ info }: { info: SessionInfo }) {
                 }}
               >
                 <span
-                  style={{
-                    backgroundImage: `url(/assets/${draft.tilesets[0].image.split('/').pop()})`,
-                    backgroundPosition: `${-((item.gid - 1) % draft.tilesets[0].columns) * 32}px ${-Math.floor((item.gid - 1) / draft.tilesets[0].columns) * 32}px`,
-                  }}
+                  style={
+                    item.sprite
+                      ? {
+                          backgroundImage: `url(/assets/sprites/${item.sprite}.png)`,
+                          backgroundSize: 'contain',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat',
+                        }
+                      : {
+                          backgroundImage: `url(/assets/${draft.tilesets[0].image.split('/').pop()})`,
+                          backgroundPosition: `${-((item.gid! - 1) % draft.tilesets[0].columns) * 32}px ${-Math.floor((item.gid! - 1) / draft.tilesets[0].columns) * 32}px`,
+                        }
+                  }
                 />
                 {item.label}
               </button>
