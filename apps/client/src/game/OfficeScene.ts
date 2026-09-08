@@ -292,11 +292,11 @@ export class OfficeScene extends Phaser.Scene {
   }
   private keyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement;
+    // Buttons retain focus after clicks. Let movement keys through without
+    // blurring them, so Tab/Enter/Space still work for keyboard navigation.
     if (
       document.querySelector('.whiteboard-dialog') ||
-      target.closest(
-        'input,textarea,select,button,[contenteditable],dialog:modal,[role="dialog"]',
-      ) ||
+      target.closest('input,textarea,select,[contenteditable],dialog:modal,[role="dialog"]') ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey

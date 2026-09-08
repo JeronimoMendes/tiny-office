@@ -102,7 +102,10 @@ test('owner invites a coworker, both move, profile/desks persist and reconnect r
   await expect(coworker.getByTestId(`person-${owner.id}`)).toContainText('Alice Oak');
 
   const start = ownerPlayers.get(owner.id)!;
-  await page.locator('.map-stage').click({ position: { x: 600, y: 450 } });
+  // Clicking UI must not require a second click on the map to resume walking.
+  await page.getByRole('button', { name: 'Hide participants', exact: true }).click();
+  await page.getByRole('button', { name: 'Show participants', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Hide participants', exact: true })).toBeFocused();
   await page.keyboard.down('ArrowRight');
   await expect.poll(() => coworkerPlayers.get(owner.id)?.x).toBeGreaterThan(start.x + 48);
   await ownerPlayers.releaseKeys('ArrowRight');
