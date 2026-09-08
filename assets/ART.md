@@ -10,9 +10,11 @@ The art in this directory is the source. It is checked in, not generated: nothin
 
 The flattened `avatars.png` and `avatar-layers/` remain the preset reference exports. Those layers composite back to exactly the flattened sheet. The editor and Phaser use `wardrobe/` instead: independent transparent atlases with native 24 × 32 frames, 12 columns, and one row per style/color combination. Front and back hair surround the other layers; hands are separate from sleeves, and sandals reveal feet from the body layer. Skin is drawn only in the body, hands and head layers, so it always matches across the whole character.
 
+Facial hair is its own layer between the head and the front hair, so a beard sits under a fringe and over the shirt, and it is tinted by `hairColor` rather than a colour of its own. `beard.png` follows the same registration as every other atlas: five styles times eight hair colours, with the None style occupying the first eight empty rows.
+
 `packages/shared/src/wardrobe.json` is the shared, append-only option catalog. `appearance.ts` validates all indices, resolves old numeric characters to presets, and defines layer ordering and row registration for both renderers. The `wardrobe/` atlases carry one row per style/color combination in that catalog's order. Keep their layer slot order synchronized with `appearanceLayers`; unit tests check atlas dimensions and row bounds.
 
-Profiles save an optional `appearance` record alongside the legacy character number. A null record uses the original preset. Database migration 2 adds the JSONB column without changing existing profiles. Protocol version 3 carries the record in member and player updates, including reconnect snapshots. Part indices are stable: append new options, and migrate existing records if ever reordering or removing options.
+Profiles save an optional `appearance` record alongside the legacy character number. A null record uses the original preset. Database migration 2 adds the JSONB column without changing existing profiles. Protocol version 3 carries the record in member and player updates, including reconnect snapshots. Part indices are stable: append new options, and migrate existing records if ever reordering or removing options. A whole new slot needs the same care, since stored records are read back without revalidation: migration 4 backfills `beard` into every saved appearance, and the schema defaults the key so a client running older code can still save.
 
 ## Desks and props
 

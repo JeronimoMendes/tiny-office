@@ -82,6 +82,13 @@ export class Store {
         );
         await db.query('INSERT INTO schema_migrations VALUES (3)');
       }
+      if (!(await db.query('SELECT 1 FROM schema_migrations WHERE version = 4')).rowCount) {
+        await db.query(
+          `UPDATE users SET appearance = appearance || '{"beard":0}'::jsonb
+           WHERE appearance IS NOT NULL`,
+        );
+        await db.query('INSERT INTO schema_migrations VALUES (4)');
+      }
     });
   }
   async ensureWorkspace(id: string, input: unknown) {

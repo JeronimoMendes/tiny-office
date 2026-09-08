@@ -12,6 +12,7 @@
     "#5f6f8c",
     "#d9d2c4"
   ],
+  "beard": ["None", "Stubble", "Moustache", "Goatee", "Full beard"],
   "shirt": ["Tee", "Hoodie", "Blazer", "Sweater", "Cardigan", "Turtleneck", "Overalls", "Vest"],
   "shirtColor": [
     "#6d9089",
