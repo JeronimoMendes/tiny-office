@@ -4,6 +4,10 @@ A small self-hosted, top-down virtual office. **Phase 2: audio/video.** React UI
 
 Implemented: phase-1 movement and space, editable availability, and zone-based calls. Walking into a desk or meeting room joins that zone's conversation; the open floor is silent. Focus receives the zone conversation while keeping the local microphone and camera off until explicitly enabled. DND is excluded from media entirely. Every media decision comes from the authoritative server position and status: each zone is its own SFU room, credentials name one room and last two minutes, and the server reconciles LiveKit membership and publish permissions, disconnecting anyone whose permissions exceed current policy. Calls support explicit screen sharing alongside the camera, with a local preview and labeled remote screen tiles. Moods and chat are not implemented.
 
+## Feature proposals
+
+[Collaborative agent participants — draft RFC](docs/rfcs/001-agent-participants.md) explores voice-enabled bot coworkers, shared computer-use sessions and terminal access, with externally managed backends and skills. It compares three architectures and proposes a phased roadmap; none of this agent functionality is implemented yet.
+
 ## Start locally
 
 Requires Docker with Compose:

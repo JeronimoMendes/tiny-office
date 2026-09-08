@@ -9,6 +9,10 @@ Simple core, maintainability, then scale. Finish and verify each phase end to en
 3. **Presence:** free/focus/DND controls and visible indicators, cosmetic moods. Status is persisted from phase 1; media enforcement belongs in phase 2, not phase 3.
 4. **Chat:** persisted workspace and direct messages with authorization. No chat machinery in the movement loop.
 
+## Proposed feature track: collaborative agents
+
+[RFC 001: Collaborative agent participants](docs/rfcs/001-agent-participants.md) is a draft for discussion, not an approved phase or implementation. It compares LiveKit-native workers, a backend-neutral connector and remote-workstation participants, recommending a narrow external connector with voice-first delivery and later screen/terminal attachments. Agent runtimes and skills remain outside this repository; no in-process plugin system is proposed. Approve the architecture, privacy model and priority before changing the phase order above or adding dependencies/services.
+
 ## Stack
 
 - React + TypeScript + Vite for the interface.
