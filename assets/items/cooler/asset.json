@@ -1,0 +1,13 @@
+{
+  "name": "cooler",
+  "label": "Water cooler",
+  "width": 1,
+  "solid": true,
+  "variants": [
+    {
+      "name": "cooler",
+      "label": "Default view",
+      "gid": 33
+    }
+  ]
+}

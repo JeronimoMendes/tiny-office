@@ -1,0 +1,13 @@
+{
+  "name": "table",
+  "label": "Large table",
+  "width": 2,
+  "solid": true,
+  "variants": [
+    {
+      "name": "table",
+      "label": "Default view",
+      "gid": 23
+    }
+  ]
+}

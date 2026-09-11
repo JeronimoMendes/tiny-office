@@ -56,6 +56,8 @@ test('desk editor layers, covered-item selection and collision preview', async (
     .selectOption({ label: 'Test rug · #999999' });
   await expect(page.getByLabel('Render layer')).toHaveValue('ground');
   await page.getByLabel('Show collision footprints').check();
+  await expect(page.getByLabel('Facing / artwork')).toBeDisabled();
+  await page.getByLabel('Angle (degrees)').fill('90');
   await page.getByLabel('Render layer').selectOption('furniture');
   await page.getByLabel('Priority within layer').fill('12');
   await page.getByRole('button', { name: 'Save desk', exact: true }).click();
@@ -63,6 +65,7 @@ test('desk editor layers, covered-item selection and collision preview', async (
     page.getByText('Saved. Everyone in the office is reloading the updated map.'),
   ).toBeVisible();
   const rug = saved!.layers.find((l) => l.name === 'decor')!.objects!.find((o) => o.id === 999999)!;
+  expect(rug.rotation).toBe(90);
   expect(itemProperty(rug, 'renderLayer')).toBe('furniture');
   expect(itemProperty(rug, 'renderOrder')).toBe(12);
   expect(errors).toEqual([]);

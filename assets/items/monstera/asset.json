@@ -1,0 +1,21 @@
+{
+  "name": "monstera",
+  "label": "Monstera",
+  "width": 1,
+  "height": 2,
+  "solid": true,
+  "collision": {
+    "x": 8,
+    "y": 46,
+    "width": 16,
+    "height": 16
+  },
+  "variants": [
+    {
+      "name": "monstera",
+      "label": "Default view",
+      "sprite": "monstera",
+      "image": "default.png"
+    }
+  ]
+}

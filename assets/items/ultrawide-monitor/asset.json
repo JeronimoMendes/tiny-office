@@ -1,0 +1,14 @@
+{
+  "name": "ultrawide-monitor",
+  "label": "Ultrawide monitor",
+  "width": 2,
+  "height": 1,
+  "variants": [
+    {
+      "name": "ultrawide-monitor",
+      "label": "Default view",
+      "sprite": "ultrawide-monitor",
+      "image": "default.png"
+    }
+  ]
+}

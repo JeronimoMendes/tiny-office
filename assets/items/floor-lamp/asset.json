@@ -1,0 +1,13 @@
+{
+  "name": "floor-lamp",
+  "label": "Floor lamp",
+  "width": 1,
+  "solid": true,
+  "variants": [
+    {
+      "name": "floor-lamp",
+      "label": "Default view",
+      "gid": 35
+    }
+  ]
+}

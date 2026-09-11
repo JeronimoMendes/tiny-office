@@ -1,0 +1,13 @@
+{
+  "name": "couch",
+  "label": "Couch",
+  "width": 2,
+  "solid": true,
+  "variants": [
+    {
+      "name": "couch",
+      "label": "Default view",
+      "gid": 21
+    }
+  ]
+}

@@ -3,42 +3,47 @@ import catalog from '../../../assets/catalog.json';
 import { itemProperty, type Item, type ItemBounds } from './item-bounds';
 import type { TiledMap } from './map';
 
-export const renderLayerSchema = z.enum(['ground', 'furniture', 'surface']);
-export type RenderLayer = z.infer<typeof renderLayerSchema>;
-const boxSchema = z
-  .object({
-    x: z.number().nonnegative(),
-    y: z.number().nonnegative(),
-    width: z.number().positive(),
-    height: z.number().positive(),
-  })
-  .strict();
-const assetSchema = z
-  .object({
-    name: z.string(),
-    label: z.string(),
-    gid: z.number().int().positive().optional(),
-    sprite: z
-      .string()
-      .regex(/^[a-z0-9-]+$/)
-      .optional(),
-    width: z.number().int().positive(),
-    height: z.number().int().positive().default(1),
-    solid: z.boolean().default(false),
-    collision: boxSchema.nullable().optional(),
-    renderLayer: renderLayerSchema.default('furniture'),
-  })
-  .strict()
-  .refine((a) => Boolean(a.gid) !== Boolean(a.sprite), 'Choose a tileset piece or a sprite')
-  .refine(
-    (a) =>
-      !a.collision ||
-      (a.collision.x + a.collision.width <= a.width * 32 &&
-        a.collision.y + a.collision.height <= a.height * 32),
-    'Collision must fit inside the asset',
-  );
+import { assetSchema, renderLayerSchema, type DecorAsset } from './asset-schema';
+export { renderLayerSchema, type RenderLayer, type DecorAsset } from './asset-schema';
 export const decorCatalog = z.array(assetSchema).parse(catalog);
-export type DecorAsset = (typeof decorCatalog)[number];
+export const decorFamilies = [...new Set(decorCatalog.map((asset) => asset.family))].map(
+  (name) => ({
+    name,
+    label: decorCatalog.find((asset) => asset.family === name)!.familyLabel,
+    variants: decorCatalog.filter((asset) => asset.family === name),
+  }),
+);
+
+export function spriteImage(sprite: string) {
+  // Stored maps keep their stable sprite IDs; file locations may change freely.
+  return `/assets/${decorCatalog.find((asset) => asset.sprite === sprite)?.image ?? `sprites/${sprite}.png`}`;
+}
+
+/** Swap directional artwork while preserving the center, angle and personal metadata. */
+export function applyDecorVariant(item: Item, variant: DecorAsset) {
+  const centerX = item.x + item.width / 2,
+    centerY = item.y + item.height / 2;
+  item.width = variant.width * 32;
+  item.height = variant.height * 32;
+  item.x = centerX - item.width / 2;
+  item.y = centerY - item.height / 2;
+  item.name = variant.label;
+  item.properties = item.properties.filter(
+    (p) => !['sprite', 'tileData', 'columns', 'solid'].includes(p.name),
+  );
+  item.properties.push({ name: 'solid', value: variant.solid });
+  if (variant.sprite) item.properties.push({ name: 'sprite', value: variant.sprite });
+  else
+    item.properties.push(
+      { name: 'columns', value: variant.width },
+      {
+        name: 'tileData',
+        value: JSON.stringify(
+          Array.from({ length: variant.width * variant.height }, (_, i) => variant.gid! + i),
+        ),
+      },
+    );
+}
 
 export function decorAsset(item: Item, map?: TiledMap) {
   const sprite = itemProperty(item, 'sprite');

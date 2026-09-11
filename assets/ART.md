@@ -2,7 +2,7 @@
 
 Original pixel art with warm oak, sage walls, terracotta pots and slate upholstery. Characters use a 24 × 32 pixel canvas and a restrained palette.
 
-The art in this directory is the source. It is checked in, not generated: nothing rebuilds it, so editing a file is how the art changes. New pieces are drawn as pixel art and added to `sprites/`, where each one stays its own PNG and needs no packing — see Hand-drawn sprites. The existing sheets keep the registration the sections below describe.
+The art in this directory is the source. It is checked in, not generated: preparation only compiles metadata and never rebuilds PNGs. Big items live in one folder per family under `items/`; each folder has an `asset.json` manifest and any hand-drawn directional PNGs. The existing sheets keep the registration described below.
 
 ## Characters
 
@@ -24,11 +24,13 @@ Each starter desk has a hidden `surfaces` rectangle with a stable `surfaceId` ma
 
 The built-in owner editor places these props off-grid and can associate them with a stable desk ID. Props can be moved and rotated independently; moving a desk zone carries its associated small items. Removing an item leaves the clean desktop object intact.
 
-## Hand-drawn sprites
+## Item families and directional artwork
 
-`sprites/` holds one PNG per hand-drawn piece at world resolution — 32px to the tile, so a two-by-two piece is 64 × 64. Nothing packs them into a sheet. A decor object names one in a `sprite` property instead of carrying `tileData`, and the renderer loads `/assets/sprites/<name>.png` and draws it over the object's rectangle, rotating and depth-sorting it exactly as tile-backed decor. The name is validated as a bare filename, since it becomes a URL.
+`items/<family>/asset.json` is the authored source for each big item. Common dimensions, collision, solidity and render layer live at the manifest root. Its `variants` array lists one or more artwork views and may override those defaults. Variant IDs are stable because maps store them.
 
-So adding a piece is: draw the PNG, drop it in `sprites/`, and give it an entry in `assets/catalog.json` with `sprite` set instead of `gid`. Its size in tiles is whatever `width` and `height` say; the PNG is scaled to that rectangle, so draw it at exactly 32px per tile to keep the pixels square. The catalog is shared by the editor palette, desk-edit validation, rendering and collision. `cat-rug.png` is the first of these.
+A tile-backed variant supplies `gid`. A hand-drawn variant supplies a stable `sprite` ID, an `image` filename in the same family folder, and artwork at world resolution—32px per tile. Nothing packs these images into a sheet. `npm run assets:prepare` validates every manifest and image, then compiles `assets/catalog.json` and visible bounds. Do not edit generated `catalog.json` directly.
+
+For a true directional view, add another variant such as `north`, `south`, `east`, or `west` with its own GID or PNG. The editor's **Facing / artwork** selector swaps variants while preserving the object's center, free angle, ownership, render layer and priority. The chair family demonstrates two existing views. Items with only one view still support arbitrary angle rotation. Variants may have different dimensions and collision footprints—for example, a front-facing desk can be 2×1 tiles while its side view is 1×2.
 
 `office-cozy.png` also still carries a copy of the cat rug at tile IDs 37–40, from when it was packed into the atlas. Nothing references those cells now; they can go the next time that sheet is redrawn.
 
@@ -53,7 +55,7 @@ Tests verify metadata against the finished artwork.
 
 ## Authored collision and render metadata
 
-`assets/catalog.json` contains the big-item palette and intentional settings that
+The compiled `assets/catalog.json` contains the big-item palette and intentional settings that
 cannot be inferred from alpha. `width` and `height` are in 32px tiles. `solid`
 defaults to false. For solid items, `collision` is a rectangle in world pixels
 relative to the unrotated artwork's top-left; omitting it uses the full rectangle.

@@ -1,0 +1,15 @@
+{
+  "name": "rug",
+  "label": "Large rug",
+  "width": 3,
+  "height": 3,
+  "renderLayer": "ground",
+  "collision": null,
+  "variants": [
+    {
+      "name": "rug",
+      "label": "Default view",
+      "gid": 10
+    }
+  ]
+}

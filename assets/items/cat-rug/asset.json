@@ -1,0 +1,16 @@
+{
+  "name": "cat-rug",
+  "label": "Cat rug",
+  "width": 2,
+  "height": 2,
+  "renderLayer": "ground",
+  "collision": null,
+  "variants": [
+    {
+      "name": "cat-rug",
+      "label": "Default view",
+      "sprite": "cat-rug",
+      "image": "default.png"
+    }
+  ]
+}
