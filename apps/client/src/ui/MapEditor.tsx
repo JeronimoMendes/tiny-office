@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   editableDeskItem,
   decorCatalog,
+  decorFamilies,
+  decorAsset,
+  applyDecorVariant,
+  spriteImage,
   itemRenderDepth,
   itemRenderSettings,
   itemCollisionBounds,
@@ -290,6 +294,10 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
       : selection?.type === 'prop'
         ? propsLayer?.objects?.[selection.index]
         : undefined;
+  const selectedAsset =
+    selectedItem && selection?.type === 'decor' ? decorAsset(selectedItem, draft) : undefined;
+  const selectedFamily = decorFamilies.find((family) => family.name === selectedAsset?.family);
+  const placingFamily = decorFamilies.find((family) => family.name === decorChoice?.family);
   const renderSettings = selectedItem
     ? itemRenderSettings(selectedItem, selection?.type === 'prop', draft)
     : undefined;
@@ -326,7 +334,7 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
     for (const { sprite } of decorChoices) {
       if (!sprite || sprites.current.has(sprite)) continue;
       const image = new Image();
-      image.src = `/assets/sprites/${sprite}.png`;
+      image.src = spriteImage(sprite);
       image.onload = () => {
         sprites.current.set(sprite, image);
         draw();
@@ -764,8 +772,7 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
                 (candidate) => candidate.objects?.map((object) => object.id) ?? [],
               ),
             ) + 1;
-          const count = decorChoice.width * (decorChoice.height ?? 1);
-          layer.objects.push({
+          const object: EditorObject = {
             id,
             name: decorChoice.label,
             x,
@@ -773,22 +780,10 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
             width,
             height,
             rotation: 0,
-            properties: decorChoice.sprite
-              ? [
-                  { name: 'sprite', value: decorChoice.sprite },
-                  { name: 'solid', value: decorChoice.solid ?? false },
-                ]
-              : [
-                  {
-                    name: 'tileData',
-                    value: JSON.stringify(
-                      Array.from({ length: count }, (_, index) => decorChoice.gid! + index),
-                    ),
-                  },
-                  { name: 'columns', value: decorChoice.width },
-                  { name: 'solid', value: decorChoice.solid ?? false },
-                ],
-          });
+            properties: [],
+          };
+          applyDecorVariant(object, decorChoice);
+          layer.objects.push(object);
           const index = layer.objects.length - 1;
           setSelection({ type: 'decor', index });
           setSelectedObjects([{ type: 'decor', index }]);
@@ -1262,7 +1257,19 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
       }
     });
   }
-  function rotateSelection(amount: number) {
+  function changeFacing(name: string) {
+    const variant = selectedFamily?.variants.find((asset) => asset.name === name);
+    if (!variant) return;
+    mutate((map) => {
+      for (const selected of selectedObjects) {
+        if (selected.type !== 'decor') continue;
+        const object = map.layers.find((l) => l.name === 'decor')?.objects?.[selected.index];
+        if (object && decorAsset(object, map)?.family === variant.family)
+          applyDecorVariant(object, variant);
+      }
+    });
+  }
+  function rotateSelection(amount: number, absolute = false) {
     if (!selectedObjects.length) return;
     mutate((map) => {
       for (const selected of selectedObjects) {
@@ -1270,7 +1277,8 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
           (candidate) => candidate.name === (selected.type === 'prop' ? 'props' : 'decor'),
         );
         const object = layer?.objects?.[selected.index];
-        if (object) object.rotation = (object.rotation + amount + 360) % 360;
+        if (object)
+          object.rotation = (((absolute ? amount : object.rotation + amount) % 360) + 360) % 360;
       }
     });
   }
@@ -1446,9 +1454,41 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
             {(selection.type === 'decor' || selection.type === 'prop') && (
               <div className="rotation-controls">
                 <span>Rotate</span>
-                <button onClick={() => rotateSelection(-45)}>↶ 45°</button>
-                <button onClick={() => rotateSelection(45)}>↷ 45°</button>
+                <button onClick={() => rotateSelection(-90)}>↶ 90°</button>
+                <button onClick={() => rotateSelection(90)}>↷ 90°</button>
               </div>
+            )}
+            {selectedItem && (
+              <label>
+                Angle (degrees)
+                <input
+                  type="number"
+                  step="15"
+                  value={selectedItem.rotation}
+                  onChange={(event) => rotateSelection(Number(event.target.value) || 0, true)}
+                />
+              </label>
+            )}
+            {selectedFamily && selectedAsset && (
+              <label>
+                Facing / artwork
+                <select
+                  value={selectedAsset.name}
+                  disabled={selectedFamily.variants.length === 1}
+                  onChange={(event) => changeFacing(event.target.value)}
+                >
+                  {selectedFamily.variants.map((variant) => (
+                    <option key={variant.name} value={variant.name}>
+                      {variant.variantLabel}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  {selectedFamily.variants.length === 1
+                    ? 'One artwork view available; use Angle to rotate it.'
+                    : `Changes artwork for selected ${selectedFamily.label.toLowerCase()} items; keeps their angle.`}
+                </small>
+              </label>
             )}
             {renderSettings && (
               <>
@@ -1623,34 +1663,58 @@ export function MapEditor({ info, deskOnly = false }: { info: SessionInfo; deskO
             or rotate the whole piece.
           </small>
           <div className="decor-palette">
-            {decorChoices.map((item) => (
-              <button
-                className={decorChoice?.name === item.name ? 'active' : ''}
-                key={item.name}
-                onClick={() => {
-                  setDecorChoice(item);
+            {decorFamilies.map((family) => {
+              const item = decorChoice?.family === family.name ? decorChoice : family.variants[0];
+              return (
+                <button
+                  className={decorChoice?.family === family.name ? 'active' : ''}
+                  key={family.name}
+                  onClick={() => {
+                    setDecorChoice(item);
+                    setTool('object');
+                  }}
+                >
+                  <span
+                    style={
+                      item.sprite
+                        ? {
+                            backgroundImage: `url(${spriteImage(item.sprite)})`,
+                            backgroundSize: 'contain',
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat',
+                          }
+                        : {
+                            backgroundImage: `url(/assets/${draft.tilesets[0].image.split('/').pop()})`,
+                            backgroundPosition: `${-((item.gid! - 1) % draft.tilesets[0].columns) * 32}px ${-Math.floor((item.gid! - 1) / draft.tilesets[0].columns) * 32}px`,
+                          }
+                    }
+                  />
+                  {family.label}
+                  {family.variants.length > 1 ? ` · ${family.variants.length} views` : ''}
+                </button>
+              );
+            })}
+          </div>
+          {placingFamily && placingFamily.variants.length > 1 && (
+            <label>
+              Place facing
+              <select
+                value={decorChoice!.name}
+                onChange={(event) => {
+                  setDecorChoice(
+                    placingFamily.variants.find((variant) => variant.name === event.target.value)!,
+                  );
                   setTool('object');
                 }}
               >
-                <span
-                  style={
-                    item.sprite
-                      ? {
-                          backgroundImage: `url(/assets/sprites/${item.sprite}.png)`,
-                          backgroundSize: 'contain',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: 'no-repeat',
-                        }
-                      : {
-                          backgroundImage: `url(/assets/${draft.tilesets[0].image.split('/').pop()})`,
-                          backgroundPosition: `${-((item.gid! - 1) % draft.tilesets[0].columns) * 32}px ${-Math.floor((item.gid! - 1) / draft.tilesets[0].columns) * 32}px`,
-                        }
-                  }
-                />
-                {item.label}
-              </button>
-            ))}
-          </div>
+                {placingFamily.variants.map((variant) => (
+                  <option key={variant.name} value={variant.name}>
+                    {variant.variantLabel}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <h2 className="subheading">Small items</h2>
           {!deskOnly && (
             <label>

@@ -1,0 +1,19 @@
+{
+  "name": "plant-tall",
+  "label": "Tall flower pot",
+  "width": 1,
+  "solid": true,
+  "collision": {
+    "x": 9,
+    "y": 21,
+    "width": 14,
+    "height": 11
+  },
+  "variants": [
+    {
+      "name": "plant-tall",
+      "label": "Default view",
+      "gid": 29
+    }
+  ]
+}

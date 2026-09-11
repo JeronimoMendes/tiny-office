@@ -1,0 +1,13 @@
+{
+  "name": "stool",
+  "label": "Stool",
+  "width": 1,
+  "solid": true,
+  "variants": [
+    {
+      "name": "stool",
+      "label": "Default view",
+      "gid": 34
+    }
+  ]
+}

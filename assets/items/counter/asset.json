@@ -1,0 +1,13 @@
+{
+  "name": "counter",
+  "label": "Counter",
+  "width": 2,
+  "solid": true,
+  "variants": [
+    {
+      "name": "counter",
+      "label": "Default view",
+      "gid": 25
+    }
+  ]
+}

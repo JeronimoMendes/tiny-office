@@ -1,0 +1,13 @@
+{
+  "name": "cabinet",
+  "label": "Cabinet",
+  "width": 1,
+  "solid": true,
+  "variants": [
+    {
+      "name": "cabinet",
+      "label": "Default view",
+      "gid": 32
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "wind-turbine",
+  "label": "Wind turbine",
+  "width": 1,
+  "height": 2,
+  "variants": [
+    {
+      "name": "wind-turbine",
+      "label": "Default view",
+      "sprite": "wind-turbine",
+      "image": "default.png"
+    }
+  ]
+}

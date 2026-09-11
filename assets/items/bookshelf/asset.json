@@ -1,0 +1,13 @@
+{
+  "name": "bookshelf",
+  "label": "Bookshelf",
+  "width": 1,
+  "solid": true,
+  "variants": [
+    {
+      "name": "bookshelf",
+      "label": "Default view",
+      "gid": 31
+    }
+  ]
+}

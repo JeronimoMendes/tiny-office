@@ -1,0 +1,13 @@
+{
+  "name": "divider",
+  "label": "Divider",
+  "width": 1,
+  "solid": true,
+  "variants": [
+    {
+      "name": "divider",
+      "label": "Default view",
+      "gid": 36
+    }
+  ]
+}

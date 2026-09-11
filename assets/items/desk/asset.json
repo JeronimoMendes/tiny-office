@@ -1,0 +1,13 @@
+{
+  "name": "desk",
+  "label": "Large desk",
+  "width": 2,
+  "solid": true,
+  "variants": [
+    {
+      "name": "desk",
+      "label": "Default view",
+      "gid": 19
+    }
+  ]
+}

@@ -1,7 +1,7 @@
-/** Post-process finished artwork; never changes PNGs. Run npm run assets:bounds. */
-import { readFileSync, readdirSync, writeFileSync, existsSync, watch } from 'node:fs';
+/** Read visible bounds from finished artwork; never changes PNGs. */
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { fileURLToPath } from 'node:url';
+import type { DecorAsset } from '../packages/shared/src/asset-schema';
 import { resolve } from 'node:path';
 
 export type Bounds = { x: number; y: number; width: number; height: number };
@@ -67,7 +67,10 @@ export function alphaBounds(image: ReturnType<typeof readRGBA>, region: Bounds):
   return right < 0 ? null : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
 }
 
-export function collectBounds(root: string) {
+export function collectBounds(
+  root: string,
+  catalog: DecorAsset[] = JSON.parse(readFileSync(resolve(root, 'catalog.json'), 'utf8')),
+) {
   const load = (name: string) => readRGBA(readFileSync(resolve(root, name)));
   const manifest = JSON.parse(readFileSync(resolve(root, 'props.json'), 'utf8'));
   const atlas = load('props.png');
@@ -91,15 +94,26 @@ export function collectBounds(root: string) {
       ];
     }),
   );
+  const files = new Map(
+    catalog.filter((asset) => asset.sprite).map((asset) => [asset.sprite!, asset.image!]),
+  );
+  // Retain support for old custom maps with unregistered bare sprite IDs.
+  if (existsSync(resolve(root, 'sprites')))
+    for (const name of readdirSync(resolve(root, 'sprites'))) {
+      if (name.endsWith('.png') && !files.has(name.slice(0, -4)))
+        files.set(name.slice(0, -4), `sprites/${name}`);
+    }
   const sprites = Object.fromEntries(
-    readdirSync(resolve(root, 'sprites'))
-      .filter((name) => name.endsWith('.png'))
-      .sort()
-      .map((name) => {
-        const image = load(`sprites/${name}`);
+    [...files]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, file]) => {
+        const image = load(file);
+        const asset = catalog.find((asset) => asset.sprite === name);
+        if (asset && (image.width !== asset.width * 32 || image.height !== asset.height * 32))
+          throw new Error(`Sprite ${name} dimensions must match its variant's width and height`);
         const bounds = alphaBounds(image, { x: 0, y: 0, width: image.width, height: image.height });
         if (!bounds) throw new Error(`Empty sprite: ${name}`);
-        return [name.slice(0, -4), { width: image.width, height: image.height, bounds }];
+        return [name, { width: image.width, height: image.height, bounds }];
       }),
   );
   const tiles = Object.fromEntries(
@@ -119,34 +133,4 @@ export function collectBounds(root: string) {
     }),
   );
   return { props, sprites, tiles };
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const root = fileURLToPath(new URL('../assets/', import.meta.url));
-  const output = resolve(root, 'item-bounds.json');
-  const refresh = () => {
-    const bounds = collectBounds(root);
-    if (
-      existsSync(output) &&
-      JSON.stringify(JSON.parse(readFileSync(output, 'utf8'))) === JSON.stringify(bounds)
-    )
-      return;
-    writeFileSync(output, JSON.stringify(bounds, null, 2) + '\n');
-    console.log('Updated item bounds from artwork');
-  };
-  refresh();
-  if (process.argv.includes('--watch')) {
-    let pending: ReturnType<typeof setTimeout> | undefined;
-    watch(root, { recursive: true }, (_event, filename) => {
-      if (!filename || !(filename.endsWith('.png') || filename === 'props.json')) return;
-      clearTimeout(pending);
-      pending = setTimeout(() => {
-        try {
-          refresh();
-        } catch (error) {
-          console.error('Unable to refresh item bounds; check the artwork export:', error);
-        }
-      }, 150);
-    });
-  }
 }

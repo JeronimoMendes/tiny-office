@@ -40,7 +40,7 @@ describe('authored asset metadata', () => {
     expect(new Set(decorCatalog.map((a) => a.name)).size).toBe(decorCatalog.length);
     for (const asset of decorCatalog)
       if (asset.sprite) {
-        const png = readFileSync(`assets/sprites/${asset.sprite}.png`);
+        const png = readFileSync(`assets/${asset.image}`);
         expect(png.readUInt32BE(16)).toBe(asset.width * 32);
         expect(png.readUInt32BE(20)).toBe(asset.height * 32);
       }

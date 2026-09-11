@@ -4,6 +4,7 @@ import {
   appearanceFrames,
   decorObjects,
   itemRenderDepth,
+  spriteImage,
   appearanceLayers,
   presetAppearance,
   parseMap,
@@ -123,7 +124,7 @@ export class OfficeScene extends Phaser.Scene {
         .map((object) => object.sprite)
         .filter((name): name is string => name !== null),
     ))
-      this.load.image(`sprite-${sprite}`, `/assets/sprites/${sprite}.png`);
+      this.load.image(`sprite-${sprite}`, spriteImage(sprite));
   }
   create() {
     const parsed = parseMap(this.snapshot.workspace.map);
