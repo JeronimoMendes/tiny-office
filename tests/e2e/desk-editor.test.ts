@@ -14,16 +14,32 @@ test('desk editor layers, covered-item selection and collision preview', async (
     .objects!.find((o) => itemProperty(o, 'kind') === 'desk')!;
   map.layers
     .find((l) => l.name === 'decor')!
-    .objects!.push({
-      id: 999999,
-      name: 'Test rug',
-      x: desk.x + 8,
-      y: desk.y + 8,
-      width: 64,
-      height: 64,
-      rotation: 0,
-      properties: [{ name: 'sprite', value: 'cat-rug' }],
-    });
+    .objects!.push(
+      {
+        id: 999999,
+        name: 'Test rug',
+        x: desk.x + 8,
+        y: desk.y + 8,
+        width: 64,
+        height: 64,
+        rotation: 0,
+        properties: [{ name: 'sprite', value: 'cat-rug' }],
+      },
+      {
+        id: 999998,
+        name: 'Test chair',
+        x: desk.x + 100,
+        y: desk.y + 88,
+        width: 32,
+        height: 32,
+        rotation: 0,
+        properties: [
+          { name: 'tileData', value: '[27]' },
+          { name: 'columns', value: 1 },
+          { name: 'solid', value: true },
+        ],
+      },
+    );
   const workspace = {
     id: '00000000-0000-4000-8000-000000000001',
     name: 'Test office',
@@ -68,5 +84,13 @@ test('desk editor layers, covered-item selection and collision preview', async (
   expect(rug.rotation).toBe(90);
   expect(itemProperty(rug, 'renderLayer')).toBe('furniture');
   expect(itemProperty(rug, 'renderOrder')).toBe(12);
+
+  await page
+    .getByLabel('Select item (including covered items)')
+    .selectOption({ label: 'Test chair · #999998' });
+  await expect(page.getByLabel('Facing / artwork')).toBeEnabled();
+  await expect(page.getByLabel('Facing / artwork')).toHaveValue('chair-up');
+  await page.getByLabel('Facing / artwork').selectOption('chair-down');
+  await expect(page.getByLabel('Facing / artwork')).toHaveValue('chair-down');
   expect(errors).toEqual([]);
 });
